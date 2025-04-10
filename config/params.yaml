@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    camera_ip: "192.168.144.25"
+    command_port: 37260
+    rtsp_port: 8554
+    update_rate: 10.0
+    image_width: 1280
+    image_height: 720
