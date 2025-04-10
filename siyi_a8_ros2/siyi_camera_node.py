@@ -120,7 +120,7 @@ class SIYICameraNode(Node):
         """
         try:
             # RTSP URL for SIYI camera
-            rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/live"
+            rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
             
             # Open video capture
             self.rtsp_camera = cv2.VideoCapture(rtsp_url)
