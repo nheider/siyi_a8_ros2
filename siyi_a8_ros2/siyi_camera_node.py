@@ -119,13 +119,12 @@ class SIYICameraNode(Node):
         Setup RTSP connection for video streaming
         """
         try:
-
+            
             # RTSP URL for SIYI camera
             rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
-            gst_pipeline = f"rtspsrc location={rtsp_url} latency=100 ! decodebin ! videoconvert ! appsink"
             
             # Open video capture
-            self.rtsp_camera = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+            self.rtsp_camera = cv2.VideoCapture(rtsp_url)
             if not self.rtsp_camera.isOpened():
                 self.get_logger().error("Failed to open RTSP stream")
                 return False
@@ -142,45 +141,65 @@ class SIYICameraNode(Node):
             return False
     
     def rtsp_streaming(self):
-        """
-        Thread function for RTSP streaming
-        """
-        while rclpy.ok():
-            try:
-                if self.rtsp_camera and self.rtsp_camera.isOpened():
-                    ret, frame = self.rtsp_camera.read()
-                    if ret:
-                        # Convert frame to ROS message
-                        img_msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
-                        img_msg.header.stamp = self.get_clock().now().to_msg()
-                        img_msg.header.frame_id = "siyi_camera_optical_frame"
-                        
-                        # Publish image
-                        self.image_pub.publish(img_msg)
-                        
-                        # Also publish camera info
-                        self.publish_camera_info(img_msg.header)
-                    else:
-                        self.get_logger().warning("Failed to read frame from RTSP stream")
-                        # Try to reconnect
-                        self.rtsp_camera.release()
-                        time.sleep(1.0)
-                        self.setup_rtsp()
-                else:
-                    self.get_logger().warning("RTSP camera not opened, trying to reconnect")
-                    self.setup_rtsp()
-                    time.sleep(1.0)
-                    
-            except Exception as e:
-                self.get_logger().error(f"RTSP streaming error: {str(e)}")
-                # Try to reconnect
-                if self.rtsp_camera:
-                    self.rtsp_camera.release()
-                time.sleep(1.0)
-                self.setup_rtsp()
-                
-            # Sleep briefly to avoid high CPU usage
-            time.sleep(0.01)
+	    """
+	    Thread function for RTSP streaming with improved error handling
+	    """
+	    consecutive_failures = 0
+	    max_consecutive_failures = 5
+	    
+	    while rclpy.ok():
+		try:
+		    if self.rtsp_camera and self.rtsp_camera.isOpened():
+		        ret, frame = self.rtsp_camera.read()
+		        if ret and frame is not None and frame.size > 0:
+		            # Reset failure counter on success
+		            consecutive_failures = 0
+		            
+		            # Convert frame to ROS message
+		            img_msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
+		            img_msg.header.stamp = self.get_clock().now().to_msg()
+		            img_msg.header.frame_id = "siyi_camera_optical_frame"
+		            
+		            # Publish image
+		            self.image_pub.publish(img_msg)
+		            
+		            # Also publish camera info
+		            self.publish_camera_info(img_msg.header)
+		        else:
+		            consecutive_failures += 1
+		            self.get_logger().warning(f"Failed to read frame from RTSP stream ({consecutive_failures}/{max_consecutive_failures})")
+		            
+		            # Only try to reconnect after several consecutive failures
+		            if consecutive_failures >= max_consecutive_failures:
+		                self.get_logger().warning("Too many consecutive failures, reconnecting RTSP")
+		                if self.rtsp_camera:
+		                    self.rtsp_camera.release()
+		                time.sleep(2.0)
+		                self.setup_rtsp()
+		                consecutive_failures = 0
+		    else:
+		        self.get_logger().warning("RTSP camera not opened, trying to reconnect")
+		        self.setup_rtsp()
+		        time.sleep(2.0)
+		        
+		except cv2.error as cv_err:
+		    self.get_logger().error(f"OpenCV error in RTSP streaming: {str(cv_err)}")
+		    consecutive_failures += 1
+		    
+		except Exception as e:
+		    self.get_logger().error(f"RTSP streaming error: {str(e)}")
+		    consecutive_failures += 1
+		    
+		    # Try to reconnect after several failures
+		    if consecutive_failures >= max_consecutive_failures:
+		        if self.rtsp_camera:
+		            self.rtsp_camera.release()
+		        time.sleep(2.0)
+		        self.setup_rtsp()
+		        consecutive_failures = 0
+		        
+		# Sleep briefly to avoid high CPU usage
+		time.sleep(0.03)  # Slightly longer sleep to reduce CPU load
     
     def udp_receiver(self):
         """
