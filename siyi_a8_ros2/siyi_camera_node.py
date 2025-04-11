@@ -125,7 +125,7 @@ class SIYICameraNode(Node):
             gst_pipeline = f"rtspsrc location={rtsp_url} latency=100 ! decodebin ! videoconvert ! appsink"
             
             # Open video capture
-	    self.rtsp_camera = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+            self.rtsp_camera = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
             if not self.rtsp_camera.isOpened():
                 self.get_logger().error("Failed to open RTSP stream")
                 return False
