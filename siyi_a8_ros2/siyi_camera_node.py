@@ -119,11 +119,13 @@ class SIYICameraNode(Node):
         Setup RTSP connection for video streaming
         """
         try:
+
             # RTSP URL for SIYI camera
             rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
+            gst_pipeline = f"rtspsrc location={rtsp_url} latency=100 ! decodebin ! videoconvert ! appsink"
             
             # Open video capture
-            self.rtsp_camera = cv2.VideoCapture(rtsp_url)
+	    self.rtsp_camera = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
             if not self.rtsp_camera.isOpened():
                 self.get_logger().error("Failed to open RTSP stream")
                 return False
