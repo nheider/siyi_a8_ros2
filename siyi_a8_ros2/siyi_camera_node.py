@@ -148,7 +148,7 @@ class SIYICameraNode(Node):
 	    max_consecutive_failures = 5
 	    
 	    while rclpy.ok():
-		try:
+	        try:
 		    if self.rtsp_camera and self.rtsp_camera.isOpened():
 		        ret, frame = self.rtsp_camera.read()
 		        if ret and frame is not None and frame.size > 0:
