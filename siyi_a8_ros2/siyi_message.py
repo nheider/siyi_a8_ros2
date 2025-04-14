@@ -5,12 +5,13 @@ from .siyi_crc16 import CRC16
 
 class SIYIMessage:
     """
+    
     SIYI message handler for A8 Mini camera gimbal
     """
     # Command IDs for SIYI protocol
     ACQUIRE_FIRMWARE_VERSION = "01"
     ACQUIRE_HARDWARE_ID = "02"
-    AUTOFOCUS = "04"
+    AUTOFOCUS = "04" # not available in A8 Mini 
     MANUAL_ZOOM = "05"
     ABSOLUTE_ZOOM = "0f"
     ACQUIRE_MAX_ZOOM = "16"
@@ -24,7 +25,7 @@ class SIYIMessage:
     CONTROL_ANGLE = "0e"
     
     def __init__(self):
-        self.HEADER = "6655"
+        self.HEADER = "5566" # low byte first, then high byte
         self._ctr = "01"
         self._seq = 0
         self.MINIMUM_DATA_LENGTH = 10 * 2
@@ -47,7 +48,7 @@ class SIYIMessage:
         if len(seq_hex) < 4:
             seq_hex = '0' * (4 - len(seq_hex)) + seq_hex
             
-        # Swap bytes for SIYI protocol
+        # Swap bytes 
         low_b = seq_hex[-2:]
         high_b = seq_hex[:2]
         
@@ -98,9 +99,22 @@ class SIYIMessage:
             print(f"Invalid header: {header}, expected: {self.HEADER}")
             return data, data_len, cmd_id, seq
             
-        # Check data length, bytes are reversed
-        data_len_hex = msg[6:8]
-        data_len = int(data_len_hex, 16)
+        # Extract control byte
+        ctrl = msg[4:6]
+        
+        # Check data length (low byte first, then high byte)
+        data_len_low = msg[6:8]
+        data_len_high = msg[8:10]
+        # Convert to integer (properly handling the byte order)
+        data_len = int(data_len_low, 16) + (int(data_len_high, 16) << 8)
+        
+        # Get sequence (low byte first, then high byte)
+        seq_low = msg[10:12]
+        seq_high = msg[12:14]
+        seq = int(seq_low, 16) + (int(seq_high, 16) << 8)
+        
+        # Get command ID
+        cmd_id = msg[14:16]
         
         # Perform CRC16 checkout
         msg_crc = msg[-4:].lower()
@@ -113,15 +127,9 @@ class SIYIMessage:
             print(f"Message: {msg}")
             return data, data_len, cmd_id, seq
             
-        # Get sequence
-        seq = msg[8:10]
-        
-        # Get command ID
-        cmd_id = msg[10:12]
-        
         # Get data
         if data_len > 0:
-            data = msg[12:12 + data_len * 2]  # *2 because each byte is 2 chars
+            data = msg[16:16 + data_len * 2]  # *2 because each byte is 2 chars
             
         return data, data_len, cmd_id, seq
         
