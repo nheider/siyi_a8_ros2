@@ -293,12 +293,13 @@ class SIYIMessage:
         return self.encode_msg(data, cmd_id)
         
     def gimbal_angles_msg(self, yaw, pitch):
-    """Control gimbal by angles
-    
-    Args:
-        yaw: -135 to 135 degrees
-        pitch: -90 to 25 degrees
-    """
+        """
+        Control gimbal by angles
+        
+        Args:
+            yaw: -135 to 135 degrees
+            pitch: -90 to 25 degrees
+        """
         # Clamp values
         yaw = max(-135.0, min(135.0, yaw))
         pitch = max(-90.0, min(25.0, pitch))
