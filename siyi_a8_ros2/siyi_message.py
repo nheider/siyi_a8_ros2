@@ -24,7 +24,7 @@ class SIYIMessage:
     CONTROL_ANGLE = "0e"
     
     def __init__(self):
-        self.HEADER = "5566"
+        self.HEADER = "6655"
         self._ctr = "01"
         self._seq = 0
         self.MINIMUM_DATA_LENGTH = 10 * 2
@@ -293,25 +293,31 @@ class SIYIMessage:
         return self.encode_msg(data, cmd_id)
         
     def gimbal_angles_msg(self, yaw, pitch):
-        """Control gimbal by angles
-        
-        Args:
-            yaw: -135 to 135 degrees
-            pitch: -90 to 25 degrees
-        """
+    """Control gimbal by angles
+    
+    Args:
+        yaw: -135 to 135 degrees
+        pitch: -90 to 25 degrees
+    """
         # Clamp values
         yaw = max(-135.0, min(135.0, yaw))
         pitch = max(-90.0, min(25.0, pitch))
-        
+    
         # Convert to int (×10 for precision)
         control_yaw = int(yaw * 10)
         control_pitch = int(pitch * 10)
         
-        # Convert to hex
-        data1 = format(control_yaw & 0xFF, '02x')
-        data2 = format(control_pitch & 0xFF, '02x')
+        # Convert to hex - need to handle full 16-bit signed values
+        yaw_hex = format(control_yaw & 0xFFFF, '04x')
+        pitch_hex = format(control_pitch & 0xFFFF, '04x')
         
-        data = data1 + data2
+        # Swap bytes for SIYI protocol
+        yaw_low = yaw_hex[2:]
+        yaw_high = yaw_hex[:2]
+        pitch_low = pitch_hex[2:]
+        pitch_high = pitch_hex[:2]
+        
+        data = yaw_low + yaw_high + pitch_low + pitch_high
         cmd_id = self.CONTROL_ANGLE
         return self.encode_msg(data, cmd_id)
         
