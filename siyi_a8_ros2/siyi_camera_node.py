@@ -198,12 +198,12 @@ class SIYICameraNode(Node):
     def process_response(self, response_hex):
         try:
             data, data_len, cmd_id, seq = self.siyi_msg.decode_msg(response_hex)
-            if cmd_id == ACQUIRE_FIRMWARE_VERSION:
+            if cmd_id == self.siyi_msg.ACQUIRE_FIRMWARE_VERSION:
                 self.get_logger().info(f"Firmware version: {data}")
-            elif cmd_id == ACQUIRE_GIMBAL_INFO:
+            elif cmd_id == self.siyi_msg.ACQUIRE_HARDWARE_ID:
                 if data_len > 0:
                     self.get_logger().info(f"Gimbal info: {data}")
-            elif cmd_id == ACQUIRE_GIMBAL_ATTITUDE:
+            elif cmd_id == self.siyi_msg.ACQUIRE_GIMBAL_ATTITUDE:
                 if len(data) >= 12:
                     yaw = int(data[0:4], 16) / 10.0
                     pitch = int(data[4:8], 16) / 10.0
@@ -214,11 +214,11 @@ class SIYICameraNode(Node):
                     state_msg = Float32MultiArray()
                     state_msg.data = [yaw, pitch, roll]
                     self.gimbal_state_pub.publish(state_msg)
-            elif cmd_id == ACQUIRE_MAX_ZOOM:
+            elif cmd_id == self.siyi_msg.ACQUIRE_MAX_ZOOM:
                 if data_len > 0:
                     max_zoom = int(data, 16)
                     self.get_logger().info(f"Maximum zoom level: {max_zoom}x")
-            elif cmd_id == FUNCTION_FEEDBACK_INFO:
+            elif cmd_id == self.siyi_msg.FUNCTION_FEEDBACK_INFO:
                 if data_len > 0:
                     self.get_logger().info(f"Function feedback: {data}")
             else:
