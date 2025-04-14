@@ -81,29 +81,3 @@ class CRC16:
             
         return crc & 0xffff
 
-    @staticmethod
-    def test():
-        """Test the CRC16 implementation against known values"""
-        logging.basicConfig(
-            format='%(asctime)s [CRC16::%(funcName)s] [%(levelname)s]:\t%(message)s', 
-            level=logging.INFO
-        )
-        log = logging.getLogger(__name__)
-        
-        data = "5566010100000005FF"
-        expected_crc = "5c6a"
-        
-        crc16 = CRC16()
-        result = crc16.compute_str_swap(data)
-        
-        log.info(f"Computed CRC16: {result}")
-        
-        if result != expected_crc:
-            log.error(f"CRC16 of data failed! Got {result}, expected {expected_crc}")
-        else:
-            log.info("CRC16 Pass!")
-        
-        return result == expected_crc
-
-if __name__ == "__main__":
-    CRC16.test()

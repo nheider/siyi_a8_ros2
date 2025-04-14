@@ -2,26 +2,26 @@
 
 from .siyi_crc16 import CRC16
 
-# Command IDs for SIYI protocol
-ACQUIRE_FIRMWARE_VERSION = "01"
-ACQUIRE_HARDWARE_ID = "02"
-AUTOFOCUS = "04"
-MANUAL_ZOOM = "05"
-ABSOLUTE_ZOOM = "0f"
-ACQUIRE_MAX_ZOOM = "16"
-MANUAL_FOCUS = "06"
-GIMBAL_ROTATION = "07"
-CENTER = "08"
-ACQUIRE_GIMBAL_INFO = "0a"
-FUNCTION_FEEDBACK_INFO = "0b"
-PHOTO_VIDEO = "0c"
-ACQUIRE_GIMBAL_ATTITUDE = "0d"
-CONTROL_ANGLE = "0e"
 
 class SIYIMessage:
     """
     SIYI message handler for A8 Mini camera gimbal
     """
+    # Command IDs for SIYI protocol
+    ACQUIRE_FIRMWARE_VERSION = "01"
+    ACQUIRE_HARDWARE_ID = "02"
+    AUTOFOCUS = "04"
+    MANUAL_ZOOM = "05"
+    ABSOLUTE_ZOOM = "0f"
+    ACQUIRE_MAX_ZOOM = "16"
+    MANUAL_FOCUS = "06"
+    GIMBAL_ROTATION = "07"
+    CENTER = "08"
+    ACQUIRE_GIMBAL_INFO = "0a"
+    FUNCTION_FEEDBACK_INFO = "0b"
+    PHOTO_VIDEO = "0c"
+    ACQUIRE_GIMBAL_ATTITUDE = "0d"
+    CONTROL_ANGLE = "0e"
     
     def __init__(self):
         self.HEADER = "5566"
