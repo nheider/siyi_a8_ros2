@@ -150,37 +150,37 @@ class SIYIMessage:
     def firmware_version_msg(self):
         """Get firmware version message"""
         data = ""
-        cmd_id = ACQUIRE_FIRMWARE_VERSION
+        cmd_id = self.ACQUIRE_FIRMWARE_VERSION
         return self.encode_msg(data, cmd_id)
         
     def hardware_id_msg(self):
         """Get hardware ID message"""
         data = ""
-        cmd_id = ACQUIRE_HARDWARE_ID
+        cmd_id = self.ACQUIRE_HARDWARE_ID
         return self.encode_msg(data, cmd_id)
         
     def autofocus_msg(self):
         """Trigger autofocus"""
         data = "01"
-        cmd_id = AUTOFOCUS
+        cmd_id = self.AUTOFOCUS
         return self.encode_msg(data, cmd_id)
         
     def zoom_in_msg(self):
         """Zoom in camera"""
         data = "01"
-        cmd_id = MANUAL_ZOOM
+        cmd_id = self.MANUAL_ZOOM
         return self.encode_msg(data, cmd_id)
         
     def zoom_out_msg(self):
         """Zoom out camera"""
         data = "ff"  # -1 in hex
-        cmd_id = MANUAL_ZOOM
+        cmd_id = self.MANUAL_ZOOM
         return self.encode_msg(data, cmd_id)
         
     def zoom_halt_msg(self):
         """Stop zooming"""
         data = "00"
-        cmd_id = MANUAL_ZOOM
+        cmd_id = self.MANUAL_ZOOM
         return self.encode_msg(data, cmd_id)
         
     def absolute_zoom_msg(self, integer, fractional):
@@ -195,25 +195,25 @@ class SIYIMessage:
     def maximum_zoom_msg(self):
         """Get maximum zoom level"""
         data = ""
-        cmd_id = ACQUIRE_MAX_ZOOM
+        cmd_id = self.ACQUIRE_MAX_ZOOM
         return self.encode_msg(data, cmd_id)
         
     def focus_far_msg(self):
         """Focus farther"""
         data = "01"
-        cmd_id = MANUAL_FOCUS
+        cmd_id = self.MANUAL_FOCUS
         return self.encode_msg(data, cmd_id)
         
     def focus_close_msg(self):
         """Focus closer"""
         data = "ff"  # -1 in hex
-        cmd_id = MANUAL_FOCUS
+        cmd_id = self.MANUAL_FOCUS
         return self.encode_msg(data, cmd_id)
         
     def focus_halt_msg(self):
         """Stop focusing"""
         data = "00"
-        cmd_id = MANUAL_FOCUS
+        cmd_id = self.MANUAL_FOCUS
         return self.encode_msg(data, cmd_id)
         
     def gimbal_speed_msg(self, yaw_speed, pitch_speed):
@@ -232,61 +232,61 @@ class SIYIMessage:
         data2 = format(pitch_speed & 0xFF, '02x')
         
         data = data1 + data2
-        cmd_id = GIMBAL_ROTATION
+        cmd_id = self.GIMBAL_ROTATION
         return self.encode_msg(data, cmd_id)
         
     def gimbal_center_msg(self):
         """Center the gimbal"""
         data = "01"
-        cmd_id = CENTER
+        cmd_id = self.CENTER
         return self.encode_msg(data, cmd_id)
         
     def gimbal_info_msg(self):
         """Get gimbal information"""
         data = ""
-        cmd_id = ACQUIRE_GIMBAL_INFO
+        cmd_id = self.ACQUIRE_GIMBAL_INFO
         return self.encode_msg(data, cmd_id)
         
     def lock_mode_msg(self):
         """Set gimbal to lock mode"""
         data = "03"
-        cmd_id = PHOTO_VIDEO
+        cmd_id = self.PHOTO_VIDEO
         return self.encode_msg(data, cmd_id)
         
     def follow_mode_msg(self):
         """Set gimbal to follow mode"""
         data = "04"
-        cmd_id = PHOTO_VIDEO
+        cmd_id = self.PHOTO_VIDEO
         return self.encode_msg(data, cmd_id)
         
     def fpv_mode_msg(self):
         """Set gimbal to FPV mode"""
         data = "05"
-        cmd_id = PHOTO_VIDEO
+        cmd_id = self.PHOTO_VIDEO
         return self.encode_msg(data, cmd_id)
         
     def function_feedback_msg(self):
         """Get function feedback information"""
         data = ""
-        cmd_id = FUNCTION_FEEDBACK_INFO
+        cmd_id = self.FUNCTION_FEEDBACK_INFO
         return self.encode_msg(data, cmd_id)
         
     def photo_msg(self):
         """Take a photo"""
         data = "00"
-        cmd_id = PHOTO_VIDEO
+        cmd_id = self.PHOTO_VIDEO
         return self.encode_msg(data, cmd_id)
         
     def record_msg(self):
         """Start/stop recording"""
         data = "02"
-        cmd_id = PHOTO_VIDEO
+        cmd_id = self.PHOTO_VIDEO
         return self.encode_msg(data, cmd_id)
         
     def gimbal_attitude_msg(self):
         """Get gimbal attitude"""
         data = ""
-        cmd_id = ACQUIRE_GIMBAL_ATTITUDE
+        cmd_id = self.ACQUIRE_GIMBAL_ATTITUDE
         return self.encode_msg(data, cmd_id)
         
     def gimbal_angles_msg(self, yaw, pitch):
@@ -309,7 +309,7 @@ class SIYIMessage:
         data2 = format(control_pitch & 0xFF, '02x')
         
         data = data1 + data2
-        cmd_id = CONTROL_ANGLE
+        cmd_id = self.CONTROL_ANGLE
         return self.encode_msg(data, cmd_id)
         
     def straight_down_msg(self):
