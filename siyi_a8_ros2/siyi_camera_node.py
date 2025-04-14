@@ -244,6 +244,7 @@ class SIYICameraNode(Node):
         yaw_speed = int(msg.angular.z)
         pitch_speed = int(msg.angular.y)
         command = self.siyi_msg.gimbal_speed_msg(yaw_speed, pitch_speed)
+        self.get_logger().info(f"Sending gimbal control command: {command}")
         self.send_command(command)
 
     def gimbal_angle_callback(self, msg):
