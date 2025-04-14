@@ -89,36 +89,39 @@ class SIYIMessage:
         seq = 0
         
         if len(msg) < self.MINIMUM_DATA_LENGTH:
-            print("Warning, message length is not long enough for decoding")
+            print(f"Warning, message length is not long enough for decoding: {len(msg)}")
+            return data, data_len, cmd_id, seq
+            
+        # Check header
+        header = msg[0:4]
+        if header != self.HEADER:
+            print(f"Invalid header: {header}, expected: {self.HEADER}")
             return data, data_len, cmd_id, seq
             
         # Check data length, bytes are reversed
-        low_b = msg[6:8]
-        high_b = msg[8:10]
-        data_len_str = high_b + low_b
-        data_len = int(data_len_str, 16)
+        data_len_hex = msg[6:8]
+        data_len = int(data_len_hex, 16)
         
         # Perform CRC16 checkout
-        msg_crc = msg[-4:]
+        msg_crc = msg[-4:].lower()
         payload = msg[:-4]
-        crc = CRC16.compute_str_swap(payload)
+        crc = CRC16.compute_str_swap(payload).lower()
         
         if crc != msg_crc:
-            print("Warning, CRC16 error during message decoding")
+            print(f"Warning, CRC16 error during message decoding")
+            print(f"Calculated CRC: {crc}, Message CRC: {msg_crc}")
+            print(f"Message: {msg}")
             return data, data_len, cmd_id, seq
             
         # Get sequence
-        low_b = msg[10:12]
-        high_b = msg[12:14]
-        seq_hex = high_b + low_b
-        seq = int(seq_hex, 16)
+        seq = msg[8:10]
         
         # Get command ID
-        cmd_id = msg[14:16]
+        cmd_id = msg[10:12]
         
         # Get data
         if data_len > 0:
-            data = msg[16:16 + data_len * 2]  # *2 because each byte is 2 chars
+            data = msg[12:12 + data_len * 2]  # *2 because each byte is 2 chars
             
         return data, data_len, cmd_id, seq
         
@@ -189,7 +192,7 @@ class SIYIMessage:
         data1 = format(integer & 0xFF, '02x')
         data2 = format(fractional & 0xFF, '02x')
         data = data1 + data2
-        cmd_id = ABSOLUTE_ZOOM
+        cmd_id = self.ABSOLUTE_ZOOM
         return self.encode_msg(data, cmd_id)
         
     def maximum_zoom_msg(self):

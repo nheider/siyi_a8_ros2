@@ -7,6 +7,7 @@ Utility functions for the SIYI A8 camera package
 import struct
 
 def bytes_to_hex_string(data_bytes):
+    
     """
     Convert bytes to hex string
     
@@ -84,3 +85,23 @@ def parse_zoom_level(data_hex):
     
     zoom_level = integer_part + (fractional_part / 100.0)
     return zoom_level
+
+def Acquire_firmware_version(data_hex):
+    """
+    Parse firmware version data from hex string
+    
+    Args:
+        data_hex: Hex string with firmware version data
+        
+    Returns:
+        str: Firmware version string (e.g. "1.2.3")
+    """
+    if len(data_hex) < 6:
+        return "Unknown"
+    
+    # SIYI protocol typically uses 3 bytes for version (major.minor.patch)
+    major = int(data_hex[0:2], 16)
+    minor = int(data_hex[2:4], 16)
+    patch = int(data_hex[4:6], 16)
+    
+    return f"{major}.{minor}.{patch}"
