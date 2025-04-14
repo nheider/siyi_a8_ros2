@@ -240,6 +240,7 @@ class SIYICameraNode(Node):
                 self.get_logger().warning("Lost connection to SIYI A8 Mini")
 
     def gimbal_control_callback(self, msg):
+        self.get_logger().info(f"Received gimbal control: {msg}")
         yaw_speed = int(msg.angular.z)
         pitch_speed = int(msg.angular.y)
         command = self.siyi_msg.gimbal_speed_msg(yaw_speed, pitch_speed)
