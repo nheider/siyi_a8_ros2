@@ -105,12 +105,28 @@ class SIYICameraNode(Node):
 
     def setup_rtsp(self):
         try:
-            rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
-            self.rtsp_camera = cv2.VideoCapture(rtsp_url)
+            # Use GStreamer pipeline for better HEVC handling
+            gst_pipeline = (
+                f"rtspsrc location=rtsp://{self.camera_ip}:{self.rtsp_port}/main.264 latency=100 "
+                f"! rtph265depay ! h265parse ! avdec_h265 "
+                f"! videoconvert ! video/x-raw,format=BGR ! appsink max-buffers=1 drop=true"
+            )
+            
+            self.rtsp_camera = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+            
             if not self.rtsp_camera.isOpened():
-                self.get_logger().error("Failed to open RTSP stream")
-                return False
+                # Fall back to standard method if GStreamer fails
+                self.get_logger().warn("GStreamer pipeline failed, trying standard RTSP...")
+                rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
+                self.rtsp_camera = cv2.VideoCapture(rtsp_url)
+                
+                if not self.rtsp_camera.isOpened():
+                    self.get_logger().error("Failed to open RTSP stream")
+                    return False
 
+            # Set buffer size to reduce latency
+            self.rtsp_camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
             self.rtsp_thread = threading.Thread(target=self.rtsp_streaming)
             self.rtsp_thread.daemon = True
             self.rtsp_thread.start()
