@@ -174,12 +174,49 @@ class SIYICameraNode(Node):
                     data, addr = self.udp_socket.recvfrom(1024)
                     if data:
                         hex_data = binascii.hexlify(data).decode('utf-8')
-                        self.process_response(hex_data)
+                        # Split the data into messages
+                        messages = self.split_messages(hex_data)
+                        for message in messages:
+                            self.process_response(message)
             except socket.timeout:
                 pass
             except Exception as e:
                 self.get_logger().error(f"UDP receiver error: {str(e)}")
             time.sleep(0.01)
+
+    def split_messages(self, hex_data):
+        """Split concatenated SIYI messages by finding all 5566 headers"""
+        messages = []
+        # Find all occurrences of the header
+        header_positions = self.find_all_occurrences(hex_data, self.siyi_msg.HEADER)
+        
+        # Extract each message
+        for i in range(len(header_positions)):
+            start = header_positions[i]
+            # If this is the last header, get all remaining data
+            if i == len(header_positions) - 1:
+                end = len(hex_data)
+            else:
+                end = header_positions[i + 1]
+            
+            message = hex_data[start:end]
+            # Only add if it's a potentially complete message (at least minimum length)
+            if len(message) >= self.siyi_msg.MINIMUM_DATA_LENGTH:
+                messages.append(message)
+        
+        return messages
+
+    def find_all_occurrences(self, string, substring):
+        """Find all occurrences of a substring in a string"""
+        positions = []
+        start = 0
+        while True:
+            start = string.find(substring, start)
+            if start == -1:
+                break
+            positions.append(start)
+            start += len(substring)  # Move past this occurrence
+        return positions
 
     def send_command(self, command_hex):
         try:
