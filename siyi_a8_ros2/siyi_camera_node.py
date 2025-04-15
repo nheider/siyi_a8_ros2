@@ -49,6 +49,8 @@ class SIYICameraNode(Node):
         self.is_recording = False
         self.gimbal_mode = "unknown"
         self.connected = False
+        self.stop_threads = False
+        self.gst_pipeline = None  # Store reference to GStreamer pipeline
 
         # Initialize QoS profile for camera stream
         camera_qos = QoSProfile(
@@ -105,47 +107,85 @@ class SIYICameraNode(Node):
 
     def setup_rtsp(self):
         try:
-            # Use GStreamer pipeline for better HEVC handling
-            gst_pipeline = (
-                f"rtspsrc location=rtsp://{self.camera_ip}:{self.rtsp_port}/main.264 latency=100 "
-                f"! rtph265depay ! h265parse ! avdec_h265 "
-                f"! videoconvert ! video/x-raw,format=BGR ! appsink max-buffers=1 drop=true"
+            # Release any existing pipeline properly
+            self.release_gstreamer_pipeline()
+            
+            # Create GStreamer pipeline with improved parameters
+            rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
+            self.get_logger().info(f"Opening GStreamer pipeline for {rtsp_url}")
+            
+            # More robust pipeline with better error handling and TCP instead of UDP
+            gst_str = (
+                f"rtspsrc location={rtsp_url} latency=200 buffer-mode=auto protocols=tcp "
+                f"! queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 ! rtph265depay "
+                f"! h265parse ! avdec_h265 max-threads=2 ! videoconvert ! appsink max-buffers=2 drop=true"
             )
             
-            self.rtsp_camera = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+            # Create GStreamer-based capture with explicit pipeline
+            self.rtsp_camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
             
             if not self.rtsp_camera.isOpened():
-                # Fall back to standard method if GStreamer fails
-                self.get_logger().warn("GStreamer pipeline failed, trying standard RTSP...")
-                rtsp_url = f"rtsp://{self.camera_ip}:{self.rtsp_port}/main.264"
-                self.rtsp_camera = cv2.VideoCapture(rtsp_url)
+                self.get_logger().error("Failed to open GStreamer pipeline")
+                # Try one more time with a simpler pipeline
+                simple_gst_str = (
+                    f"rtspsrc location={rtsp_url} latency=500 ! rtph265depay ! h265parse ! "
+                    f"avdec_h265 ! videoconvert ! appsink"
+                )
+                self.rtsp_camera = cv2.VideoCapture(simple_gst_str, cv2.CAP_GSTREAMER)
                 
                 if not self.rtsp_camera.isOpened():
-                    self.get_logger().error("Failed to open RTSP stream")
+                    self.get_logger().error("Failed to open simpler GStreamer pipeline")
                     return False
-
-            # Set buffer size to reduce latency
-            self.rtsp_camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
-            self.rtsp_thread = threading.Thread(target=self.rtsp_streaming)
-            self.rtsp_thread.daemon = True
-            self.rtsp_thread.start()
+            # Start the streaming thread if not already running
+            if hasattr(self, 'rtsp_thread') and self.rtsp_thread.is_alive():
+                self.get_logger().warn("RTSP thread already running")
+            else:
+                self.rtsp_thread = threading.Thread(target=self.rtsp_streaming)
+                self.rtsp_thread.daemon = True
+                self.rtsp_thread.start()
+            
             return True
-
+            
         except Exception as e:
-            self.get_logger().error(f"RTSP setup error: {str(e)}")
+            self.get_logger().error(f"GStreamer setup error: {str(e)}")
             return False
+
+    def release_gstreamer_pipeline(self):
+        """Properly release GStreamer pipeline to prevent memory leaks and segfaults"""
+        try:
+            if hasattr(self, 'rtsp_camera') and self.rtsp_camera is not None:
+                # Set to NULL state explicitly before release
+                if hasattr(self.rtsp_camera, 'pipeline') and self.rtsp_camera.pipeline is not None:
+                    import gi
+                    gi.require_version('Gst', '1.0')
+                    from gi.repository import Gst
+                    self.rtsp_camera.pipeline.set_state(Gst.State.NULL)
+                    
+                self.rtsp_camera.release()
+                self.rtsp_camera = None
+                
+                # Force a garbage collection to help clean up GStreamer resources
+                import gc
+                gc.collect()
+                
+        except Exception as e:
+            self.get_logger().error(f"Error releasing GStreamer pipeline: {str(e)}")
 
     def rtsp_streaming(self):
         consecutive_failures = 0
-        max_consecutive_failures = 5
-
-        while rclpy.ok():
+        max_consecutive_failures = 3  # Lower to reconnect sooner
+        reconnect_delay = 3.0         # Longer delay for GStreamer to clean up
+        
+        while rclpy.ok() and not self.stop_threads:
             try:
                 if self.rtsp_camera and self.rtsp_camera.isOpened():
                     ret, frame = self.rtsp_camera.read()
+                    
                     if ret and frame is not None and frame.size > 0:
                         consecutive_failures = 0
+                        
+                        # Process and publish frame
                         img_msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
                         img_msg.header.stamp = self.get_clock().now().to_msg()
                         img_msg.header.frame_id = "siyi_camera_optical_frame"
@@ -153,35 +193,26 @@ class SIYICameraNode(Node):
                         self.publish_camera_info(img_msg.header)
                     else:
                         consecutive_failures += 1
-                        self.get_logger().warning(f"Failed to read frame from RTSP stream ({consecutive_failures}/{max_consecutive_failures})")
-
-                        if consecutive_failures >= max_consecutive_failures:
-                            self.get_logger().warning("Too many consecutive failures, reconnecting RTSP")
-                            if self.rtsp_camera:
-                                self.rtsp_camera.release()
-                            time.sleep(2.0)
-                            self.setup_rtsp()
-                            consecutive_failures = 0
+                        self.get_logger().warning(f"Failed to read frame ({consecutive_failures}/{max_consecutive_failures})")
                 else:
-                    self.get_logger().warning("RTSP camera not opened, trying to reconnect")
-                    self.setup_rtsp()
-                    time.sleep(2.0)
-
-            except cv2.error as cv_err:
-                self.get_logger().error(f"OpenCV error in RTSP streaming: {str(cv_err)}")
-                consecutive_failures += 1
-
-            except Exception as e:
-                self.get_logger().error(f"RTSP streaming error: {str(e)}")
-                consecutive_failures += 1
+                    consecutive_failures += 1
+                    self.get_logger().warning(f"GStreamer pipeline not ready ({consecutive_failures}/{max_consecutive_failures})")
+                    
+                # Handle reconnection
                 if consecutive_failures >= max_consecutive_failures:
-                    if self.rtsp_camera:
-                        self.rtsp_camera.release()
-                    time.sleep(2.0)
+                    self.get_logger().warning("Reconnecting GStreamer pipeline...")
+                    self.release_gstreamer_pipeline()  # Proper cleanup
+                    time.sleep(reconnect_delay)  # Longer delay for cleanup
                     self.setup_rtsp()
                     consecutive_failures = 0
-
-            time.sleep(0.03)
+                    
+                # Prevent busy-waiting
+                time.sleep(0.01)
+                
+            except Exception as e:
+                self.get_logger().error(f"Error in GStreamer streaming: {str(e)}")
+                consecutive_failures += 1
+                time.sleep(0.1)
 
     def udp_receiver(self):
         while rclpy.ok():
@@ -385,8 +416,10 @@ class SIYICameraNode(Node):
         self.camera_info_pub.publish(camera_info_msg)
 
     def cleanup(self):
-        if self.rtsp_camera and self.rtsp_camera.isOpened():
-            self.rtsp_camera.release()
+        """Cleanup all resources"""
+        self.stop_threads = True
+        time.sleep(0.5)  # Give threads time to exit cleanly
+        self.release_gstreamer_pipeline()
         if self.udp_socket:
             self.udp_socket.close()
         self.get_logger().info("SIYI A8 Mini camera node cleanup complete")
