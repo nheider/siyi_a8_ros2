@@ -338,19 +338,33 @@ class SIYICameraNode(Node):
     def publish_camera_info(self, header):
         camera_info_msg = CameraInfo()
         camera_info_msg.header = header
-        camera_info_msg.width = self.image_width
-        camera_info_msg.height = self.image_height
+        camera_info_msg.width = 1280
+        camera_info_msg.height = 720
 
-        fx = self.image_width * 0.85
-        fy = self.image_width * 0.85
-        cx = self.image_width / 2.0
-        cy = self.image_height / 2.0
-
-        camera_info_msg.k = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
-        camera_info_msg.p = [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
-        camera_info_msg.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        # Camera matrix K [fx, 0, cx, 0, fy, cy, 0, 0, 1]
+        camera_info_msg.k = [
+            743.761942, 0.0, 621.138957,
+            0.0, 738.716957, 382.489783,
+            0.0, 0.0, 1.0
+        ]
+        
+        # Projection matrix P [fx, 0, cx, Tx, 0, fy, cy, Ty, 0, 0, 1, 0]
+        camera_info_msg.p = [
+            745.416443, 0.0, 629.900108, 0.0,
+            0.0, 743.304504, 387.554254, 0.0,
+            0.0, 0.0, 1.0, 0.0
+        ]
+        
+        # Rectification matrix R [1, 0, 0, 0, 1, 0, 0, 0, 1]
+        camera_info_msg.r = [
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0
+        ]
+        
+        # Distortion model and coefficients
         camera_info_msg.distortion_model = "plumb_bob"
-        camera_info_msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
+        camera_info_msg.d = [-0.051467, 0.051758, 0.005913, 0.004882, 0.000000]
 
         self.camera_info_pub.publish(camera_info_msg)
 
