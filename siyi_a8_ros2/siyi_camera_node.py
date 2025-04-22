@@ -16,6 +16,7 @@ from cv_bridge import CvBridge
 from .siyi_message import SIYIMessage
 import math
 from geometry_msgs.msg import TransformStamped
+from siyi_a8_ros2.siyi_utils import parse_gimbal_attitude
 
 class SIYICameraNode(Node):
     """
@@ -291,36 +292,26 @@ class SIYICameraNode(Node):
                     self.get_logger().info(f"Gimbal info: {data}")
             elif cmd_id == self.siyi_msg.ACQUIRE_GIMBAL_ATTITUDE:
                 if len(data) >= 12:
-                    # Add this line to see the raw data
-                    self.get_logger().info(f"Raw gimbal attitude hex: {data} (yaw: {data[0:4]}, pitch: {data[4:8]}, roll: {data[8:12]})")
+                    # Log the raw data (keep this for debugging)
+                    self.get_logger().debug(f"Raw gimbal attitude hex: {data}")
                     
-                    # Handle signed integers properly
-                    yaw_raw = int(data[0:4], 16)
-                    if yaw_raw > 0x7FFF:
-                        yaw_raw -= 0x10000
+                    # Use the utility function to parse the attitude data
+                    gimbal_data = parse_gimbal_attitude(data)
+                    
+                    if gimbal_data:
+                        yaw = gimbal_data['yaw']
+                        pitch = gimbal_data['pitch']
+                        roll = gimbal_data['roll']
                         
-                    pitch_raw = int(data[4:8], 16)
-                    if pitch_raw > 0x7FFF:
-                        pitch_raw -= 0x10000
+                        # More descriptive and formatted logging
+                        self.get_logger().info(f"Gimbal attitude: yaw={yaw:+6.1f}°, pitch={pitch:+6.1f}°, roll={roll:+6.1f}°")
                         
-                    roll_raw = int(data[8:12], 16)
-                    if roll_raw > 0x7FFF:
-                        roll_raw -= 0x10000
-                    
-                    # Convert to degrees
-                    yaw = yaw_raw / 10.0
-                    pitch = pitch_raw / 10.0
-                    roll = roll_raw / 10.0
-                    
-                    # Add debug logging for values before they're published
-                    self.get_logger().debug(f"Parsed gimbal angles: yaw={yaw:.1f}°, pitch={pitch:.1f}°, roll={roll:.1f}°")
-                    
-                    self.gimbal_angles['yaw'] = yaw
-                    self.gimbal_angles['pitch'] = pitch
-                    self.gimbal_angles['roll'] = roll
-                    state_msg = Float32MultiArray()
-                    state_msg.data = [yaw, pitch, roll]
-                    self.gimbal_state_pub.publish(state_msg)
+                        self.gimbal_angles['yaw'] = yaw
+                        self.gimbal_angles['pitch'] = pitch
+                        self.gimbal_angles['roll'] = roll
+                        state_msg = Float32MultiArray()
+                        state_msg.data = [yaw, pitch, roll]
+                        self.gimbal_state_pub.publish(state_msg)
             elif cmd_id == self.siyi_msg.ACQUIRE_MAX_ZOOM:
                 if data_len > 0:
                     max_zoom = int(data, 16)
