@@ -144,8 +144,16 @@ class GimbalTfBroadcaster(Node):
         camera_tf.header.stamp = now
         camera_tf.header.frame_id = 'gimbal_camera_link'
         camera_tf.child_frame_id = 'siyi_camera_optical_frame'
-        # Identity transform since they should be the same frame
-        camera_tf.transform.rotation.w = 1.0
+        
+        # Apply the correct rotation to align the camera optical frame properly
+        # Rotate 90 degrees around X axis to get standard optical frame orientation
+        # (Z forward along optical axis, X right, Y down)
+        camera_quat = self.quaternion_from_euler(math.pi/2, 0, 0)
+        camera_tf.transform.rotation.x = camera_quat[0]
+        camera_tf.transform.rotation.y = camera_quat[1]
+        camera_tf.transform.rotation.z = camera_quat[2]
+        camera_tf.transform.rotation.w = camera_quat[3]
+        
         self.tf_broadcaster.sendTransform(camera_tf)
     
     def quaternion_from_euler(self, roll, pitch, yaw):
