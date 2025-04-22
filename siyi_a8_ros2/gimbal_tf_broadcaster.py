@@ -139,15 +139,16 @@ class GimbalTfBroadcaster(Node):
         self.tf_broadcaster.sendTransform(pitch_tf)
         
         # 4. Connect gimbal_camera_link to gimbal_camera_optical_frame
-        # This maps the URDF camera link to the camera driver's frame
         camera_tf = TransformStamped()
         camera_tf.header.stamp = now
         camera_tf.header.frame_id = 'gimbal_camera_link'
         camera_tf.child_frame_id = 'gimbal_camera_optical_frame'
         
-        # Apply proper camera optical transform (not identity)
-        # This rotates from x-forward to z-forward convention
-        optical_quat = self.quaternion_from_euler(math.pi/2, 0, math.pi/2)
+        # Fix the orientation so that:
+        # - z is forward (along optical axis)
+        # - x is right (not left)
+        # - y is down (image not upside down)
+        optical_quat = self.quaternion_from_euler(math.pi/2, 0, -math.pi/2)
         camera_tf.transform.rotation.x = optical_quat[0]
         camera_tf.transform.rotation.y = optical_quat[1]
         camera_tf.transform.rotation.z = optical_quat[2]
