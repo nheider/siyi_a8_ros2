@@ -19,12 +19,14 @@ class GimbalTfBroadcaster(Node):
         self.pitch = 0.0
         self.roll = 0.0
         
-        # Remove tracking for last valid angles and validation parameters
-        # self.last_valid_yaw = 0.0
-        # self.last_valid_pitch = 0.0
-        # self.last_valid_roll = 0.0
-        # self.declare_parameter('max_angle_jump', 15.0)  # Max jump in degrees
-        # self.max_angle_jump = math.radians(self.get_parameter('max_angle_jump').value)
+        # Add tracking for last valid angles
+        self.last_valid_yaw = 0.0
+        self.last_valid_pitch = 0.0
+        self.last_valid_roll = 0.0
+        
+        # Parameters for validation
+        self.declare_parameter('max_angle_jump', 15.0)  # Max jump in degrees
+        self.max_angle_jump = math.radians(self.get_parameter('max_angle_jump').value)
         
         # Create subscribers
         self.gimbal_state_sub = self.create_subscription(
@@ -39,28 +41,48 @@ class GimbalTfBroadcaster(Node):
         # Timer for publishing transforms
         self.timer = self.create_timer(0.05, self.publish_transforms)  # 20Hz
         
-        self.get_logger().info('Gimbal TF broadcaster started (validation removed)') # Modified log message
+        self.get_logger().info('Gimbal TF broadcaster started with angle validation')
         
     def gimbal_state_callback(self, msg):
-        """Update gimbal angles directly from the message"""
+        """Process gimbal state updates with validation"""
         if len(msg.data) >= 3:
-            # Directly update angles after converting degrees to radians
-            current_yaw = math.radians(msg.data[0])
-            current_pitch = math.radians(msg.data[1])
-            current_roll = math.radians(msg.data[2])
-
-            self.yaw = current_yaw
-            self.pitch = current_pitch
-            self.roll = current_roll
+            # Get raw angle values
+            raw_yaw_deg = msg.data[0]
+            raw_pitch_deg = msg.data[1]
+            raw_roll_deg = msg.data[2]
             
-            # Removed validation logic block
-            # self.get_logger().debug(f"Received angles (deg): Y={msg.data[0]:.1f}, P={msg.data[1]:.1f}, R={msg.data[2]:.1f}")
-            # ... validation code removed ...
-            # self.get_logger().debug(f"Using angles (rad): Y={self.yaw:.2f}, P={self.pitch:.2f}, R={self.roll:.2f}")
-
-        else:
-            self.get_logger().warn(f"Received incomplete gimbal state: {msg.data}")
-
+            # Convert to radians
+            new_yaw = math.radians(raw_yaw_deg)
+            new_pitch = math.radians(raw_pitch_deg)
+            new_roll = math.radians(raw_roll_deg)
+            
+            # Log raw values for debugging
+            self.get_logger().debug(f"Raw angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
+            
+            # Detect suspicious zero values when previous values were non-zero
+            # SIYI protocol sometimes sends zeros for invalid measurements
+            if (abs(raw_pitch_deg) < 0.1 and abs(self.last_valid_pitch - new_pitch) > self.max_angle_jump):
+                self.get_logger().info(f"Rejecting suspicious pitch value: {raw_pitch_deg:.1f}°")
+                new_pitch = self.pitch  # Keep previous value
+            else:
+                self.last_valid_pitch = new_pitch
+                self.pitch = new_pitch
+                
+            # Similar checks for yaw and roll
+            if (abs(raw_yaw_deg) < 0.1 and abs(self.last_valid_yaw - new_yaw) > self.max_angle_jump):
+                self.get_logger().info(f"Rejecting suspicious yaw value: {raw_yaw_deg:.1f}°")
+                new_yaw = self.yaw
+            else:
+                self.last_valid_yaw = new_yaw
+                self.yaw = new_yaw
+                
+            if (abs(raw_roll_deg) < 0.1 and abs(self.last_valid_roll - new_roll) > self.max_angle_jump):
+                self.get_logger().info(f"Rejecting suspicious roll value: {raw_roll_deg:.1f}°")
+                new_roll = self.roll
+            else:
+                self.last_valid_roll = new_roll
+                self.roll = new_roll
+            
     def publish_transforms(self):
         """Publish all the gimbal-related transforms"""
         now = self.get_clock().now().to_msg()

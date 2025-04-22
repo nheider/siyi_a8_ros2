@@ -217,78 +217,55 @@ class SIYICameraNode(Node):
                 time.sleep(0.1)
 
     def udp_receiver(self):
-        """Receives UDP packets and processes them."""
         while rclpy.ok():
             try:
-                data, addr = self.udp_socket.recvfrom(1024) # buffer size is 1024 bytes
-                hex_data = data.hex()
-                # Log the raw hex data received from the socket
-                self.get_logger().debug(f"Raw UDP received from {addr}: {hex_data}") # EDIT: Log raw received hex
-
-                # Split potentially concatenated messages
-                messages = self.split_messages(hex_data)
-                # Log the messages after splitting
-                self.get_logger().debug(f"Split messages: {messages}") # EDIT: Log split messages
-
-                for msg_hex in messages:
-                    self.process_response(msg_hex)
-
+                if self.udp_socket:
+                    data, addr = self.udp_socket.recvfrom(1024)
+                    if data:
+                        hex_data = binascii.hexlify(data).decode('utf-8')
+                        # Split the data into messages
+                        messages = self.split_messages(hex_data)
+                        for message in messages:
+                            self.process_response(message)
             except socket.timeout:
-                # self.get_logger().warn("UDP socket timeout") # Usually benign, disable spam
-                continue
+                pass
             except Exception as e:
-                self.get_logger().error(f"Error in UDP receiver: {e}")
-                # Add a small delay to prevent spamming errors in a tight loop
-                time.sleep(0.1)
+                self.get_logger().error(f"UDP receiver error: {str(e)}")
+            time.sleep(0.01)
 
     def split_messages(self, hex_data):
-        """Splits concatenated messages based on the '5566' header."""
+        """Split concatenated SIYI messages by finding all 5566 headers"""
         messages = []
-        start_index = 0
-        while start_index < len(hex_data):
-            header_index = hex_data.find('5566', start_index)
-            if header_index == -1:
-                # No more headers found, check if there's residual data
-                if start_index < len(hex_data):
-                    self.get_logger().warn(f"Discarding residual data without header: {hex_data[start_index:]}")
-                break # Exit loop if no header found
-
-            # Check if the found header is not at the very beginning of the current search window
-            if header_index > start_index:
-                 self.get_logger().warn(f"Discarding data before header: {hex_data[start_index:header_index]}")
-
-            # Try to find the length field to determine message boundary
-            # Header (4) + Ctrl (2) + DataLen (4) = 10 hex chars = 5 bytes
-            if header_index + 10 <= len(hex_data):
-                try:
-                    # Data length is 2 bytes (4 hex chars), little-endian
-                    len_hex = hex_data[header_index+6:header_index+10]
-                    # Swap bytes for correct interpretation
-                    data_len = int(len_hex[2:] + len_hex[:2], 16)
-                    # Total message length = Header (2) + Ctrl (1) + DataLen (2) + Seq (2) + CmdID (1) + Data (data_len) + CRC16 (2)
-                    # Total message length in bytes = 10 + data_len
-                    total_msg_len_bytes = 10 + data_len
-                    total_msg_len_hex = total_msg_len_bytes * 2
-
-                    if header_index + total_msg_len_hex <= len(hex_data):
-                        message = hex_data[header_index : header_index + total_msg_len_hex]
-                        messages.append(message)
-                        start_index = header_index + total_msg_len_hex
-                    else:
-                        # Not enough data for the full message according to length field
-                        self.get_logger().warn(f"Incomplete message based on length field. Header at {header_index}, needed {total_msg_len_hex} chars, got {len(hex_data) - header_index}. Data: {hex_data[header_index:]}")
-                        # Discard the rest of the buffer as it's likely corrupted or partial
-                        start_index = len(hex_data)
-                except ValueError:
-                    self.get_logger().error(f"Could not parse length field from header segment: {hex_data[header_index:header_index+10]}")
-                    # Move past the invalid header to avoid infinite loop
-                    start_index = header_index + 4 # Move past '5566'
+        # Find all occurrences of the header
+        header_positions = self.find_all_occurrences(hex_data, self.siyi_msg.HEADER)
+        
+        # Extract each message
+        for i in range(len(header_positions)):
+            start = header_positions[i]
+            # If this is the last header, get all remaining data
+            if i == len(header_positions) - 1:
+                end = len(hex_data)
             else:
-                # Not enough data to even read the length field
-                self.get_logger().warn(f"Partial message header received: {hex_data[header_index:]}")
-                start_index = len(hex_data) # Discard the rest
-
+                end = header_positions[i + 1]
+            
+            message = hex_data[start:end]
+            # Only add if it's a potentially complete message (at least minimum length)
+            if len(message) >= self.siyi_msg.MINIMUM_DATA_LENGTH:
+                messages.append(message)
+        
         return messages
+
+    def find_all_occurrences(self, string, substring):
+        """Find all occurrences of a substring in a string"""
+        positions = []
+        start = 0
+        while True:
+            start = string.find(substring, start)
+            if start == -1:
+                break
+            positions.append(start)
+            start += len(substring)  # Move past this occurrence
+        return positions
 
     def send_command(self, command_hex):
         try:
@@ -305,94 +282,42 @@ class SIYICameraNode(Node):
             return False
 
     def process_response(self, response_hex):
-        # Log the hex message being processed
-        self.get_logger().debug(f"Processing response hex: {response_hex}") # EDIT: Log hex input to this function
         try:
-            # Decode the message first
-            decoded_data = self.siyi_msg.decode_msg(response_hex)
-            if decoded_data is None:
-                # Error already logged in decode_msg if CRC failed etc.
-                return
-
-            data, data_len, cmd_id, seq = decoded_data
-            # Log the decoded components
-            self.get_logger().debug(f"Decoded: Data='{data}', Len={data_len}, CmdID={cmd_id}, Seq={seq}") # EDIT: Log decoded parts
-
-            # Now process based on command ID
+            data, data_len, cmd_id, seq = self.siyi_msg.decode_msg(response_hex)
             if cmd_id == self.siyi_msg.ACQUIRE_FIRMWARE_VERSION:
-                # Assuming data is ASCII firmware string
-                try:
-                    fw_version = bytes.fromhex(data).decode('ascii')
-                    self.get_logger().info(f"Firmware version: {fw_version}")
-                except (ValueError, UnicodeDecodeError) as e:
-                     self.get_logger().error(f"Could not decode firmware version from data '{data}': {e}")
+                self.get_logger().info(f"Firmware version: {data}")
             elif cmd_id == self.siyi_msg.ACQUIRE_HARDWARE_ID:
-                 # Assuming data is ASCII hardware ID string
-                try:
-                    hw_id = bytes.fromhex(data).decode('ascii')
-                    self.get_logger().info(f"Hardware ID: {hw_id}")
-                except (ValueError, UnicodeDecodeError) as e:
-                     self.get_logger().error(f"Could not decode hardware ID from data '{data}': {e}")
+                if data_len > 0:
+                    self.get_logger().info(f"Gimbal info: {data}")
             elif cmd_id == self.siyi_msg.ACQUIRE_GIMBAL_ATTITUDE:
-                # Check if data length is sufficient for YPR (6 bytes = 12 hex chars)
-                if data_len >= 6 and len(data) >= 12:
-                    # self.get_logger().debug(f"Raw gimbal attitude hex data field: {data}") # Redundant now with above logging
-
-                    try:
-                        # Correctly parse signed 16-bit integers (scaled by 10)
-                        # Data format is YPR, each 2 bytes (4 hex chars), little-endian
-                        yaw_hex = data[0:4]
-                        pitch_hex = data[4:8]
-                        roll_hex = data[8:12]
-
-                        # Convert little-endian hex to signed int
-                        yaw_raw = int(yaw_hex[2:] + yaw_hex[:2], 16)
-                        pitch_raw = int(pitch_hex[2:] + pitch_hex[:2], 16)
-                        roll_raw = int(roll_hex[2:] + roll_hex[:2], 16)
-
-                        # Convert from two's complement if necessary (for signed 16-bit)
-                        if yaw_raw > 0x7FFF: yaw_raw -= 0x10000
-                        if pitch_raw > 0x7FFF: pitch_raw -= 0x10000
-                        if roll_raw > 0x7FFF: roll_raw -= 0x10000
-
-                        # Convert to degrees (value is tenths of degrees)
-                        yaw = yaw_raw / 10.0
-                        pitch = pitch_raw / 10.0
-                        roll = roll_raw / 10.0
-
-                        self.get_logger().debug(f"Parsed gimbal angles: yaw={yaw:.1f}°, pitch={pitch:.1f}°, roll={roll:.1f}°")
-
-                        # Store and publish
-                        self.gimbal_angles['yaw'] = yaw
-                        self.gimbal_angles['pitch'] = pitch
-                        self.gimbal_angles['roll'] = roll
-                        state_msg = Float32MultiArray()
-                        state_msg.data = [yaw, pitch, roll]
-                        self.gimbal_state_pub.publish(state_msg)
-                    except ValueError as e:
-                        self.get_logger().error(f"Could not parse gimbal attitude data field '{data}': {e}")
-                else:
-                    self.get_logger().warn(f"Received incomplete gimbal attitude data: '{data}' (Expected 12 hex chars, got {len(data)})")
-
-            # Handle other command IDs if necessary
-            # elif cmd_id == self.siyi_msg.SOME_OTHER_COMMAND:
-            #    self.get_logger().info(f"Received response for SOME_OTHER_COMMAND with data: {data}")
-
+                if len(data) >= 12:
+                    # Add this line to see the raw data
+                    self.get_logger().debug(f"Raw gimbal attitude hex: {data}")
+                    
+                    yaw = int(data[0:4], 16) / 10.0
+                    pitch = int(data[4:8], 16) / 10.0
+                    roll = int(data[8:12], 16) / 10.0
+                    
+                    # Add debug logging for values before they're published
+                    self.get_logger().debug(f"Parsed gimbal angles: yaw={yaw:.1f}°, pitch={pitch:.1f}°, roll={roll:.1f}°")
+                    
+                    self.gimbal_angles['yaw'] = yaw
+                    self.gimbal_angles['pitch'] = pitch
+                    self.gimbal_angles['roll'] = roll
+                    state_msg = Float32MultiArray()
+                    state_msg.data = [yaw, pitch, roll]
+                    self.gimbal_state_pub.publish(state_msg)
+            elif cmd_id == self.siyi_msg.ACQUIRE_MAX_ZOOM:
+                if data_len > 0:
+                    max_zoom = int(data, 16)
+                    self.get_logger().info(f"Maximum zoom level: {max_zoom}x")
+            elif cmd_id == self.siyi_msg.FUNCTION_FEEDBACK_INFO:
+                if data_len > 0:
+                    self.get_logger().info(f"Function feedback: {data}")
             else:
-                # Log responses for commands we sent but don't have specific handlers for
-                if cmd_id in [self.siyi_msg.CENTER, self.siyi_msg.GIMBAL_ROTATION,
-                              self.siyi_msg.ABSOLUTE_ZOOM, self.siyi_msg.PHOTO_VIDEO,  
-                              self.siyi_msg.AUTOFOCUS, self.siyi_msg.MANUAL_FOCUS,
-                              self.siyi_msg.FUNCTION_FEEDBACK_INFO]:
-                     self.get_logger().info(f"Received ACK/Response for CmdID {cmd_id}, Seq {seq}. Data: '{data}'")
-                else:
-                     self.get_logger().debug(f"Received unhandled CmdID {cmd_id}, Seq {seq}. Data: '{data}'")
-
-
+                self.get_logger().debug(f"Received response for command {cmd_id}: {data}")
         except Exception as e:
-            self.get_logger().error(f"Error processing response hex '{response_hex}': {e}")
-            import traceback
-            self.get_logger().error(traceback.format_exc())
+            self.get_logger().error(f"Error processing response: {str(e)}")
 
     def update_gimbal_info(self):
         if self.connected:
