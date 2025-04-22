@@ -48,7 +48,13 @@ def generate_launch_description():
         description='Image height'
     )
     
-    # Define the node
+    look_at_distance_arg = DeclareLaunchArgument(
+        'look_at_distance',
+        default_value='10.0',
+        description='Distance in meters for the camera_look_at frame'
+    )
+    
+    # Define the camera node
     siyi_camera_node = Node(
         package='siyi_a8_ros2',
         executable='siyi_camera_node',
@@ -64,12 +70,14 @@ def generate_launch_description():
         output='screen'
     )
     
-    # Static TF publisher for camera frame (optional)
-    static_tf_node = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='siyi_camera_tf_publisher',
-        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'siyi_camera_optical_frame']
+    gimbal_tf_node = Node(
+        package='siyi_a8_ros2',
+        executable='gimbal_tf_broadcaster',
+        name='gimbal_tf_broadcaster',
+        parameters=[{
+            'look_at_distance': LaunchConfiguration('look_at_distance'),
+        }],
+        output='screen'
     )
     
     return LaunchDescription([
@@ -79,6 +87,7 @@ def generate_launch_description():
         update_rate_arg,
         image_width_arg,
         image_height_arg,
+        look_at_distance_arg,
         siyi_camera_node,
-        static_tf_node
+        gimbal_tf_node
     ])

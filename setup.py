@@ -23,8 +23,9 @@ setup(
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': [
-            'siyi_camera_node = siyi_a8_ros2.siyi_camera_node:main',
-        ],
-    },
+    'console_scripts': [
+        'siyi_camera_node = siyi_a8_ros2.siyi_camera_node:main',
+        'gimbal_tf_broadcaster = siyi_a8_ros2.gimbal_tf_broadcaster:main',
+    ],
+},
 )
