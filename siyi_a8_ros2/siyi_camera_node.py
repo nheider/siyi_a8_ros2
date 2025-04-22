@@ -190,7 +190,7 @@ class SIYICameraNode(Node):
                         # Process and publish frame
                         img_msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
                         img_msg.header.stamp = self.get_clock().now().to_msg()
-                        img_msg.header.frame_id = "siyi_camera_optical_frame"
+                        img_msg.header.frame_id = "gimbal_camera_optical_frame"
                         self.image_pub.publish(img_msg)
                         self.publish_camera_info(img_msg.header)
                     else:
