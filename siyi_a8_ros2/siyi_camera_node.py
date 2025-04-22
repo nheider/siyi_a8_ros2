@@ -292,11 +292,25 @@ class SIYICameraNode(Node):
             elif cmd_id == self.siyi_msg.ACQUIRE_GIMBAL_ATTITUDE:
                 if len(data) >= 12:
                     # Add this line to see the raw data
-                    self.get_logger().debug(f"Raw gimbal attitude hex: {data}")
+                    self.get_logger().info(f"Raw gimbal attitude hex: {data} (yaw: {data[0:4]}, pitch: {data[4:8]}, roll: {data[8:12]})")
                     
-                    yaw = int(data[0:4], 16) / 10.0
-                    pitch = int(data[4:8], 16) / 10.0
-                    roll = int(data[8:12], 16) / 10.0
+                    # Handle signed integers properly
+                    yaw_raw = int(data[0:4], 16)
+                    if yaw_raw > 0x7FFF:
+                        yaw_raw -= 0x10000
+                        
+                    pitch_raw = int(data[4:8], 16)
+                    if pitch_raw > 0x7FFF:
+                        pitch_raw -= 0x10000
+                        
+                    roll_raw = int(data[8:12], 16)
+                    if roll_raw > 0x7FFF:
+                        roll_raw -= 0x10000
+                    
+                    # Convert to degrees
+                    yaw = yaw_raw / 10.0
+                    pitch = pitch_raw / 10.0
+                    roll = roll_raw / 10.0
                     
                     # Add debug logging for values before they're published
                     self.get_logger().debug(f"Parsed gimbal angles: yaw={yaw:.1f}°, pitch={pitch:.1f}°, roll={roll:.1f}°")

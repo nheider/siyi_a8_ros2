@@ -74,11 +74,7 @@ def generate_launch_description():
         package='siyi_a8_ros2',
         executable='gimbal_tf_broadcaster',
         name='gimbal_tf_broadcaster',
-        parameters=[{
-            'look_at_distance': LaunchConfiguration('look_at_distance'),
-        }],
-        output='screen',
-        arguments=['--ros-args', '--log-level', 'debug']
+        output='screen'
     )
     
     return LaunchDescription([
