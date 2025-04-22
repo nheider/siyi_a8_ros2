@@ -14,6 +14,8 @@ import time
 import binascii
 from cv_bridge import CvBridge
 from .siyi_message import SIYIMessage
+import math
+from geometry_msgs.msg import TransformStamped
 
 class SIYICameraNode(Node):
     """
@@ -289,9 +291,16 @@ class SIYICameraNode(Node):
                     self.get_logger().info(f"Gimbal info: {data}")
             elif cmd_id == self.siyi_msg.ACQUIRE_GIMBAL_ATTITUDE:
                 if len(data) >= 12:
+                    # Add this line to see the raw data
+                    self.get_logger().debug(f"Raw gimbal attitude hex: {data}")
+                    
                     yaw = int(data[0:4], 16) / 10.0
                     pitch = int(data[4:8], 16) / 10.0
                     roll = int(data[8:12], 16) / 10.0
+                    
+                    # Add debug logging for values before they're published
+                    self.get_logger().debug(f"Parsed gimbal angles: yaw={yaw:.1f}°, pitch={pitch:.1f}°, roll={roll:.1f}°")
+                    
                     self.gimbal_angles['yaw'] = yaw
                     self.gimbal_angles['pitch'] = pitch
                     self.gimbal_angles['roll'] = roll
