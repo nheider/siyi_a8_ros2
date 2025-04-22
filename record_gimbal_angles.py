@@ -11,9 +11,9 @@ import math
 # --- Configuration ---
 CAMERA_IP = "192.168.144.25"  # Replace with your camera's IP
 COMMAND_PORT = 37260
-REQUEST_RATE_HZ = 10  # How often to request attitude data (e.g., 10Hz)
-OUTPUT_FILENAME = "gimbal_angles.csv"
-SOCKET_TIMEOUT = 0.5 # Seconds to wait for a response
+REQUEST_RATE_HZ = 5  # Lowered rate for testing
+OUTPUT_FILENAME = "gimbal_angles_debug.csv" # Changed filename
+SOCKET_TIMEOUT = 1.0 # Increased timeout for testing
 
 # --- SIYI Protocol Constants (adapted from siyi_message.py) ---
 STX = "5566"
@@ -32,63 +32,45 @@ def signal_handler(sig, frame):
 
 def encode_msg(data_hex, cmd_id, seq=0):
     """Encodes a message according to SIYI protocol."""
-    # Calculate data length (number of hex characters / 2)
     data_len = len(data_hex) // 2
-    
-    # Header: STX (2 bytes), LEN (1 byte), SEQ (1 byte), CRC16 (2 bytes), CMD_ID (1 byte)
-    # Total header length = 7 bytes
-    # Total packet length = Header length + Data length
     total_len = 7 + data_len
-    
-    # Prepare header components
     len_byte = format(total_len & 0xFF, '02x')
     seq_byte = format(seq & 0xFF, '02x')
     cmd_byte = format(cmd_id & 0xFF, '02x')
-    
-    # Prepare packet for CRC calculation (LEN, SEQ, CMD_ID, DATA)
     crc_input_hex = len_byte + seq_byte + cmd_byte + data_hex
-    crc_input_bytes = binascii.unhexlify(crc_input_hex)
-    
-    # Calculate CRC16 (implementation omitted for brevity - assuming 0 for now)
-    # A proper CRC16 implementation (e.g., CRC-16-CCITT) should be used
-    # if the camera validates it. For requesting data, it might not be necessary.
-    crc16_val = 0 # Replace with actual CRC calculation if needed
+    # --- CRC Calculation Placeholder ---
+    # Using 0 for now. Add proper CRC-16-CCITT if needed.
+    crc16_val = 0
     crc16_hex = format(crc16_val & 0xFFFF, '04x')
-    
-    # Construct final message
+    # --- End CRC Placeholder ---
     message_hex = STX + len_byte + seq_byte + crc16_hex + cmd_byte + data_hex
     return binascii.unhexlify(message_hex)
 
 def decode_msg(response_bytes):
     """Decodes a received SIYI message."""
     response_hex = binascii.hexlify(response_bytes).decode('ascii')
-    
+    print(f"DEBUG: Raw received hex: {response_hex}") # DEBUG PRINT
+
     if not response_hex.startswith(STX):
-        # print(f"Warning: Invalid start bytes: {response_hex[:4]}")
+        print(f"DEBUG: Invalid start bytes: {response_hex[:4]}") # DEBUG PRINT
         return None, None, None, None
-        
+
     try:
-        # Extract header fields
         len_byte = int(response_hex[4:6], 16)
         seq = int(response_hex[6:8], 16)
-        # crc16 = int(response_hex[8:12], 16) # CRC ignored for now
         cmd_id = int(response_hex[12:14], 16)
-        
-        # Extract data payload
         data_hex = response_hex[14:]
         data_len = len(data_hex) // 2
-        
-        # Basic length check
+
         if len_byte != (7 + data_len):
-            # print(f"Warning: Length mismatch. Header: {len_byte}, Calculated: {7 + data_len}")
+            print(f"DEBUG: Length mismatch. Header: {len_byte}, Calculated: {7 + data_len}") # DEBUG PRINT
             return None, None, None, None
 
-        # TODO: Add CRC validation here if needed
-
+        print(f"DEBUG: Decoded CMD_ID: {cmd_id:#04x}, SEQ: {seq}, Data: {data_hex}") # DEBUG PRINT
         return data_hex, data_len, cmd_id, seq
-        
+
     except (ValueError, IndexError) as e:
-        print(f"Error decoding message: {e}, Hex: {response_hex}")
+        print(f"DEBUG: Error decoding message: {e}, Hex: {response_hex}") # DEBUG PRINT
         return None, None, None, None
 
 def gimbal_attitude_msg():
@@ -96,99 +78,96 @@ def gimbal_attitude_msg():
     return encode_msg("", CMD_ACQUIRE_GIMBAL_ATTITUDE)
 
 def parse_gimbal_attitude(data_hex):
-    """
-    Parses gimbal attitude data from hex string.
-    Logic from siyi_utils.py (lines 47-64) / siyi_camera_node.py (lines 297-310)
-    """
+    """Parses gimbal attitude data from hex string."""
     if len(data_hex) < 12:
-        print(f"Warning: Attitude data too short: {data_hex}")
+        print(f"DEBUG: Attitude data too short: {data_hex}") # DEBUG PRINT
         return None
 
     try:
-        # Correctly parse signed 16-bit integers (scaled by 10)
         yaw_raw = int(data_hex[0:4], 16)
         pitch_raw = int(data_hex[4:8], 16)
         roll_raw = int(data_hex[8:12], 16)
 
-        # Convert from two's complement if necessary
         if yaw_raw > 0x7FFF: yaw_raw -= 0x10000
         if pitch_raw > 0x7FFF: pitch_raw -= 0x10000
         if roll_raw > 0x7FFF: roll_raw -= 0x10000
 
-        # Convert to degrees
         yaw = yaw_raw / 10.0
         pitch = pitch_raw / 10.0
         roll = roll_raw / 10.0
-        
+
+        print(f"DEBUG: Parsed angles: Y={yaw:.1f} P={pitch:.1f} R={roll:.1f}") # DEBUG PRINT
         return {'yaw': yaw, 'pitch': pitch, 'roll': roll}
-        
+
     except ValueError as e:
-        print(f"Error parsing attitude data '{data_hex}': {e}")
+        print(f"DEBUG: Error parsing attitude data '{data_hex}': {e}") # DEBUG PRINT
         return None
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # Setup signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Create UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(SOCKET_TIMEOUT) # Prevent blocking indefinitely
+    sock.settimeout(SOCKET_TIMEOUT)
     server_address = (CAMERA_IP, COMMAND_PORT)
-    print(f"Listening for gimbal angles from {CAMERA_IP}:{COMMAND_PORT}")
+    print(f"Attempting to connect to {CAMERA_IP}:{COMMAND_PORT}")
     print(f"Saving data to {OUTPUT_FILENAME}")
     print("Press Ctrl+C to stop.")
 
     try:
         with open(OUTPUT_FILENAME, 'w', newline='') as f:
-            # Write CSV header
-            f.write("timestamp,yaw_deg,pitch_deg,roll_deg\n")
-            
+            f.write("timestamp,yaw_deg,pitch_deg,roll_deg\n") # Write header immediately
+
             while not stop_requested:
-                # Send request for gimbal attitude
                 request_msg = gimbal_attitude_msg()
+                print(f"\nDEBUG: Sending request: {binascii.hexlify(request_msg).decode('ascii')}") # DEBUG PRINT
                 try:
                     sock.sendto(request_msg, server_address)
                 except socket.error as e:
-                    print(f"Socket error sending request: {e}")
-                    time.sleep(1) # Wait before retrying
+                    print(f"ERROR: Socket error sending request: {e}")
+                    time.sleep(1)
                     continue
 
-                # Attempt to receive response
+                print("DEBUG: Waiting for response...") # DEBUG PRINT
                 try:
-                    response_bytes, address = sock.recvfrom(1024) # Buffer size
-                    
-                    # Decode the response
+                    response_bytes, address = sock.recvfrom(1024)
+                    print(f"DEBUG: Received {len(response_bytes)} bytes from {address}") # DEBUG PRINT
+
                     data_hex, data_len, cmd_id, seq = decode_msg(response_bytes)
 
                     if cmd_id == CMD_ACQUIRE_GIMBAL_ATTITUDE:
+                        print("DEBUG: Received Attitude Message") # DEBUG PRINT
                         angles = parse_gimbal_attitude(data_hex)
                         if angles:
                             timestamp = time.time()
                             yaw = angles['yaw']
                             pitch = angles['pitch']
                             roll = angles['roll']
-                            
-                            # Write to file
+
+                            print(f"SUCCESS: Writing to file: T={timestamp:.2f} Y={yaw:.1f} P={pitch:.1f} R={roll:.1f}") # DEBUG PRINT
                             f.write(f"{timestamp:.6f},{yaw:.2f},{pitch:.2f},{roll:.2f}\n")
-                            # Optional: Print to console
-                            print(f"Recv: Yaw={yaw:.1f} Pitch={pitch:.1f} Roll={roll:.1f}", end='\r')
-                            
+                            f.flush() # Ensure data is written immediately
+                        else:
+                            print("DEBUG: Failed to parse valid angles from attitude message.") # DEBUG PRINT
+                    elif cmd_id is not None:
+                        print(f"DEBUG: Received message with CMD_ID {cmd_id:#04x}, but expected {CMD_ACQUIRE_GIMBAL_ATTITUDE:#04x}") # DEBUG PRINT
+                    else:
+                        print("DEBUG: Failed to decode received message.") # DEBUG PRINT
+
                 except socket.timeout:
-                    # No response received within timeout, loop again
-                    # print("Socket timeout, no response received.")
-                    pass 
+                    print("DEBUG: Socket timeout, no response received.") # DEBUG PRINT
+                    pass
                 except socket.error as e:
-                    print(f"Socket error receiving data: {e}")
-                    time.sleep(1) # Wait before retrying
+                    print(f"ERROR: Socket error receiving data: {e}")
+                    time.sleep(1)
                 except Exception as e:
-                    print(f"An unexpected error occurred: {e}")
+                    print(f"ERROR: An unexpected error occurred in receive loop: {e}")
 
                 # Wait before next request
                 time.sleep(1.0 / REQUEST_RATE_HZ)
 
     except IOError as e:
-        print(f"Error opening or writing to file {OUTPUT_FILENAME}: {e}")
+        print(f"ERROR: Cannot open or write to file {OUTPUT_FILENAME}: {e}")
     finally:
         print("\nClosing socket.")
         sock.close()
