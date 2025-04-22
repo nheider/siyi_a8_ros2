@@ -45,16 +45,33 @@ def parse_gimbal_attitude(data_hex):
         return None
         
     # Data format is 3 signed 16-bit integers (YPR in tenths of degrees)
+    # SIYI protocol uses little-endian byte order (low byte in front)
+    
+    # Split and swap bytes for yaw
+    yaw_low = data_hex[0:2]
+    yaw_high = data_hex[2:4]
+    yaw_hex = yaw_high + yaw_low
+    
+    # Split and swap bytes for pitch
+    pitch_low = data_hex[4:6]
+    pitch_high = data_hex[6:8]
+    pitch_hex = pitch_high + pitch_low
+    
+    # Split and swap bytes for roll
+    roll_low = data_hex[8:10]
+    roll_high = data_hex[10:12]
+    roll_hex = roll_high + roll_low
+    
     # Convert hex to signed int
-    yaw_raw = int(data_hex[0:4], 16)
+    yaw_raw = int(yaw_hex, 16)
     if yaw_raw > 0x7FFF:
         yaw_raw -= 0x10000
         
-    pitch_raw = int(data_hex[4:8], 16)
+    pitch_raw = int(pitch_hex, 16)
     if pitch_raw > 0x7FFF:
         pitch_raw -= 0x10000
         
-    roll_raw = int(data_hex[8:12], 16)
+    roll_raw = int(roll_hex, 16)
     if roll_raw > 0x7FFF:
         roll_raw -= 0x10000
         
