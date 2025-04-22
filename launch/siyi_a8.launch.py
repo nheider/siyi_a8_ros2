@@ -77,7 +77,8 @@ def generate_launch_description():
         parameters=[{
             'look_at_distance': LaunchConfiguration('look_at_distance'),
         }],
-        output='screen'
+        output='screen',
+        arguments=['--ros-args', '--log-level', 'debug']
     )
     
     return LaunchDescription([
