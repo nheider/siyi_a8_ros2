@@ -148,7 +148,7 @@ class GimbalTfBroadcaster(Node):
         # - z is forward (along optical axis)
         # - x is right (not left)
         # - y is down (image not upside down)
-        optical_quat = self.quaternion_from_euler(math.pi/2, 0, -math.pi/2)
+        optical_quat = self.quaternion_from_euler(-math.pi/2, 0, -math.pi/2)
         camera_tf.transform.rotation.x = optical_quat[0]
         camera_tf.transform.rotation.y = optical_quat[1]
         camera_tf.transform.rotation.z = optical_quat[2]
