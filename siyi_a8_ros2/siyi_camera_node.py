@@ -380,11 +380,10 @@ class SIYICameraNode(Node):
 
             else:
                 # Log responses for commands we sent but don't have specific handlers for
-                if cmd_id in [self.siyi_msg.CENTER_GIMBAL, self.siyi_msg.GIMBAL_SPEED_CONTROL,
-                              self.siyi_msg.ABSOLUTE_ZOOM, self.siyi_msg.PHOTO, self.siyi_msg.RECORD,
-                              self.siyi_msg.AUTO_FOCUS, self.siyi_msg.MANUAL_FOCUS, self.siyi_msg.GIMBAL_LOCK_MODE,
-                              self.siyi_msg.GIMBAL_FOLLOW_MODE, self.siyi_msg.GIMBAL_FPV_MODE,
-                              self.siyi_msg.FUNCTION_FEEDBACK]: # Added FUNCTION_FEEDBACK
+                if cmd_id in [self.siyi_msg.CENTER, self.siyi_msg.GIMBAL_ROTATION,
+                              self.siyi_msg.ABSOLUTE_ZOOM, self.siyi_msg.PHOTO_VIDEO,  
+                              self.siyi_msg.AUTOFOCUS, self.siyi_msg.MANUAL_FOCUS,
+                              self.siyi_msg.FUNCTION_FEEDBACK_INFO]:
                      self.get_logger().info(f"Received ACK/Response for CmdID {cmd_id}, Seq {seq}. Data: '{data}'")
                 else:
                      self.get_logger().debug(f"Received unhandled CmdID {cmd_id}, Seq {seq}. Data: '{data}'")
