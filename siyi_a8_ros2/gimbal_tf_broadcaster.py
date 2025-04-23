@@ -5,6 +5,8 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import TransformStamped
 import tf2_ros
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
 import math
 
 
@@ -29,10 +31,52 @@ class GimbalTfBroadcaster(Node):
         # Create transform broadcaster
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         
+        # Create transform listener to get static transforms
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        
+        # Give TF system time to initialize
+        self.create_timer(1.0, self.init_transform_lookup)
+        
+        # Cached translation values
+        self.translations = {
+            'gimbal_base_link_to_yaw': None,
+            'yaw_to_roll': None,
+            'roll_to_pitch': None,
+            'pitch_to_camera': None,
+        }
+        
         # Timer for publishing transforms
-        self.timer = self.create_timer(0.1, self.publish_transforms)  # 10Hz
+        self.transform_timer = None  # We'll set this after initialization
         
         self.get_logger().info('Gimbal TF broadcaster started')
+    
+    def init_transform_lookup(self):
+        """Initialize by looking up the static transforms from URDF"""
+        try:
+            # Get translations from URDF static TFs
+            yaw_tf = self.tf_buffer.lookup_transform(
+                'gimbal_base_link', 'gimbal_yaw_link', rclpy.time.Time())
+            self.translations['gimbal_base_link_to_yaw'] = yaw_tf.transform.translation
+            
+            roll_tf = self.tf_buffer.lookup_transform(
+                'gimbal_yaw_link', 'gimbal_roll_link', rclpy.time.Time())
+            self.translations['yaw_to_roll'] = roll_tf.transform.translation
+            
+            pitch_tf = self.tf_buffer.lookup_transform(
+                'gimbal_roll_link', 'gimbal_pitch_link', rclpy.time.Time())
+            self.translations['roll_to_pitch'] = pitch_tf.transform.translation
+            
+            camera_tf = self.tf_buffer.lookup_transform(
+                'gimbal_pitch_link', 'gimbal_camera_link', rclpy.time.Time())
+            self.translations['pitch_to_camera'] = camera_tf.transform.translation
+            
+            # Start publishing transforms after we've got the initial data
+            self.transform_timer = self.create_timer(0.1, self.publish_transforms)  # 10Hz
+            self.get_logger().info('Successfully retrieved static transforms')
+            
+        except Exception as e:
+            self.get_logger().warn(f'Failed to get static transforms: {str(e)}. Will retry...')
         
     def gimbal_state_callback(self, msg):
         """Process gimbal state updates"""
@@ -48,11 +92,16 @@ class GimbalTfBroadcaster(Node):
             self.roll = math.radians(raw_roll_deg)
             
             # Log raw values for debugging
-            self.get_logger().info(f"Using angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
+            self.get_logger().debug(f"Using angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
             
     def publish_transforms(self):
         """Publish all the gimbal-related transforms"""
         now = self.get_clock().now().to_msg()
+        
+        # Only publish if we've successfully initialized translations
+        if None in self.translations.values():
+            self.get_logger().warn("Translations not yet initialized, skipping transform publish")
+            return
         
         # 1. Publish yaw link transform
         yaw_tf = TransformStamped()
@@ -60,7 +109,12 @@ class GimbalTfBroadcaster(Node):
         yaw_tf.header.frame_id = 'gimbal_base_link'
         yaw_tf.child_frame_id = 'gimbal_yaw_link'
         
-        # Only apply yaw rotation around Z
+        # Copy translation from static TF
+        yaw_tf.transform.translation.x = self.translations['gimbal_base_link_to_yaw'].x
+        yaw_tf.transform.translation.y = self.translations['gimbal_base_link_to_yaw'].y
+        yaw_tf.transform.translation.z = self.translations['gimbal_base_link_to_yaw'].z
+        
+        # Apply yaw rotation around Z
         yaw_quat = self.quaternion_from_euler(0, 0, self.yaw)
         yaw_tf.transform.rotation.x = yaw_quat[0]
         yaw_tf.transform.rotation.y = yaw_quat[1]
@@ -74,7 +128,12 @@ class GimbalTfBroadcaster(Node):
         roll_tf.header.frame_id = 'gimbal_yaw_link'
         roll_tf.child_frame_id = 'gimbal_roll_link'
         
-        # Only apply roll rotation around X
+        # Copy translation from static TF
+        roll_tf.transform.translation.x = self.translations['yaw_to_roll'].x
+        roll_tf.transform.translation.y = self.translations['yaw_to_roll'].y
+        roll_tf.transform.translation.z = self.translations['yaw_to_roll'].z
+        
+        # Apply roll rotation around X
         roll_quat = self.quaternion_from_euler(self.roll, 0, 0)
         roll_tf.transform.rotation.x = roll_quat[0]
         roll_tf.transform.rotation.y = roll_quat[1]
@@ -88,7 +147,12 @@ class GimbalTfBroadcaster(Node):
         pitch_tf.header.frame_id = 'gimbal_roll_link'
         pitch_tf.child_frame_id = 'gimbal_pitch_link'
         
-        # Only apply pitch rotation around Y
+        # Copy translation from static TF
+        pitch_tf.transform.translation.x = self.translations['roll_to_pitch'].x
+        pitch_tf.transform.translation.y = self.translations['roll_to_pitch'].y
+        pitch_tf.transform.translation.z = self.translations['roll_to_pitch'].z
+        
+        # Apply pitch rotation around Y
         pitch_quat = self.quaternion_from_euler(0, self.pitch, 0)
         pitch_tf.transform.rotation.x = pitch_quat[0]
         pitch_tf.transform.rotation.y = pitch_quat[1]
@@ -96,11 +160,16 @@ class GimbalTfBroadcaster(Node):
         pitch_tf.transform.rotation.w = pitch_quat[3]
         self.tf_broadcaster.sendTransform(pitch_tf)
         
-        # 4. Connect pitch_link to camera_link (add missing transform)
+        # 4. Connect pitch_link to camera_link
         camera_link_tf = TransformStamped()
         camera_link_tf.header.stamp = now
         camera_link_tf.header.frame_id = 'gimbal_pitch_link'
         camera_link_tf.child_frame_id = 'gimbal_camera_link'
+        
+        # Copy translation from static TF
+        camera_link_tf.transform.translation.x = self.translations['pitch_to_camera'].x
+        camera_link_tf.transform.translation.y = self.translations['pitch_to_camera'].y
+        camera_link_tf.transform.translation.z = self.translations['pitch_to_camera'].z
         
         # Identity quaternion (no rotation)
         camera_link_tf.transform.rotation.w = 1.0
