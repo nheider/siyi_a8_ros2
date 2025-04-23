@@ -33,6 +33,8 @@ class SIYICameraNode(Node):
         self.declare_parameter('update_rate', 10.0)  # Hz
         self.declare_parameter('image_width', 1280)
         self.declare_parameter('image_height', 720)
+        self.declare_parameter('use_deadband', True)  # Enable/disable deadband filter
+        self.declare_parameter('deadband_threshold', 0.15)  # Threshold in degrees
 
         # Get parameters
         self.camera_ip = self.get_parameter('camera_ip').value
@@ -41,6 +43,8 @@ class SIYICameraNode(Node):
         self.update_rate = self.get_parameter('update_rate').value
         self.image_width = self.get_parameter('image_width').value
         self.image_height = self.get_parameter('image_height').value
+        self.use_deadband = self.get_parameter('use_deadband').value
+        self.deadband_threshold = self.get_parameter('deadband_threshold').value
 
         # Initialize variables
         self.bridge = CvBridge()
@@ -299,9 +303,9 @@ class SIYICameraNode(Node):
                     gimbal_data = parse_gimbal_attitude(data)
                     
                     if gimbal_data:
-                        yaw = gimbal_data['yaw']
-                        pitch = gimbal_data['pitch']
-                        roll = gimbal_data['roll']
+                        yaw = self.filter_with_deadband(gimbal_data['yaw'], self.gimbal_angles['yaw'])
+                        pitch = self.filter_with_deadband(gimbal_data['pitch'], self.gimbal_angles['pitch'])
+                        roll = self.filter_with_deadband(gimbal_data['roll'], self.gimbal_angles['roll'])
                         
                         # More descriptive and formatted logging
                         self.get_logger().info(f"Gimbal attitude: yaw={yaw:+6.1f}°, pitch={pitch:+6.1f}°, roll={roll:+6.1f}°")
@@ -437,6 +441,33 @@ class SIYICameraNode(Node):
         if self.udp_socket:
             self.udp_socket.close()
         self.get_logger().info("SIYI A8 Mini camera node cleanup complete")
+
+    def filter_with_deadband(self, new_value, old_value, threshold=None):
+        if threshold is None:
+            threshold = self.deadband_threshold
+        """Only update value if change is greater than threshold"""
+        if not self.use_deadband or abs(new_value - old_value) >= threshold:
+            return new_value
+        return old_value
+
+    def gimbal_state_callback(self, msg):
+        """Process gimbal state updates with validation"""
+        if len(msg.data) >= 3:
+            # Get raw angle values
+            raw_yaw_deg = msg.data[0]
+            raw_pitch_deg = msg.data[1]  # This is in the SIYI camera convention
+            raw_roll_deg = msg.data[2]
+            
+            # Convert to radians and apply necessary sign conversions
+            new_yaw = math.radians(raw_yaw_deg)
+            new_pitch = -math.radians(raw_pitch_deg)  # Negate pitch for correct TF representation
+            new_roll = math.radians(raw_roll_deg)
+            
+            # Log raw values for debugging
+            self.get_logger().debug(f"Raw angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
+            self.get_logger().debug(f"Converted angles (rad): yaw={new_yaw:.3f}, pitch={new_pitch:.3f} (negated), roll={new_roll:.3f}")
+            
+            # Continue with your existing validation logic...
 
 def main(args=None):
     rclpy.init(args=args)
