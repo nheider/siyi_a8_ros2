@@ -53,7 +53,7 @@ class GimbalTfBroadcaster(Node):
             
             # Convert to radians
             new_yaw = math.radians(raw_yaw_deg)
-            new_pitch = math.radians(raw_pitch_deg)
+            new_pitch = -math.radians(raw_pitch_deg)
             new_roll = math.radians(raw_roll_deg)
             
             # Log raw values for debugging

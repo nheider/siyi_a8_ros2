@@ -450,25 +450,6 @@ class SIYICameraNode(Node):
             return new_value
         return old_value
 
-    def gimbal_state_callback(self, msg):
-        """Process gimbal state updates with validation"""
-        if len(msg.data) >= 3:
-            # Get raw angle values
-            raw_yaw_deg = msg.data[0]
-            raw_pitch_deg = msg.data[1]  # This is in the SIYI camera convention
-            raw_roll_deg = msg.data[2]
-            
-            # Convert to radians and apply necessary sign conversions
-            new_yaw = math.radians(raw_yaw_deg)
-            new_pitch = -math.radians(raw_pitch_deg)  # Negate pitch for correct TF representation
-            new_roll = math.radians(raw_roll_deg)
-            
-            # Log raw values for debugging
-            self.get_logger().debug(f"Raw angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
-            self.get_logger().debug(f"Converted angles (rad): yaw={new_yaw:.3f}, pitch={new_pitch:.3f} (negated), roll={new_roll:.3f}")
-            
-            # Continue with your existing validation logic...
-
 def main(args=None):
     rclpy.init(args=args)
     siyi_camera_node = SIYICameraNode()
