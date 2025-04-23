@@ -59,9 +59,6 @@ class GimbalTfBroadcaster(Node):
         yaw_tf.header.stamp = now
         yaw_tf.header.frame_id = 'gimbal_base_link'
         yaw_tf.child_frame_id = 'gimbal_yaw_link'
-        yaw_tf.transform.translation.x = 0.0
-        yaw_tf.transform.translation.y = 0.0
-        yaw_tf.transform.translation.z = -0.022
         
         # Only apply yaw rotation around Z
         yaw_quat = self.quaternion_from_euler(0, 0, self.yaw)
@@ -76,9 +73,6 @@ class GimbalTfBroadcaster(Node):
         roll_tf.header.stamp = now
         roll_tf.header.frame_id = 'gimbal_yaw_link'
         roll_tf.child_frame_id = 'gimbal_roll_link'
-        roll_tf.transform.translation.x = -0.022
-        roll_tf.transform.translation.y = 0.001
-        roll_tf.transform.translation.z = -0.0322
         
         # Only apply roll rotation around X
         roll_quat = self.quaternion_from_euler(self.roll, 0, 0)
@@ -93,9 +87,6 @@ class GimbalTfBroadcaster(Node):
         pitch_tf.header.stamp = now
         pitch_tf.header.frame_id = 'gimbal_roll_link'
         pitch_tf.child_frame_id = 'gimbal_pitch_link'
-        pitch_tf.transform.translation.x = 0.03
-        pitch_tf.transform.translation.y = -0.00065
-        pitch_tf.transform.translation.z = 0.0002
         
         # Only apply pitch rotation around Y
         pitch_quat = self.quaternion_from_euler(0, self.pitch, 0)
@@ -110,9 +101,7 @@ class GimbalTfBroadcaster(Node):
         camera_link_tf.header.stamp = now
         camera_link_tf.header.frame_id = 'gimbal_pitch_link'
         camera_link_tf.child_frame_id = 'gimbal_camera_link'
-        camera_link_tf.transform.translation.x = 0.025  # Adjust as needed based on real measurements
-        camera_link_tf.transform.translation.y = 0.0
-        camera_link_tf.transform.translation.z = 0.0
+        
         # Identity quaternion (no rotation)
         camera_link_tf.transform.rotation.w = 1.0
         camera_link_tf.transform.rotation.x = 0.0
