@@ -30,12 +30,12 @@ class GimbalTfBroadcaster(Node):
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         
         # Timer for publishing transforms
-        self.timer = self.create_timer(0.05, self.publish_transforms)  # 20Hz
+        self.timer = self.create_timer(0.1, self.publish_transforms)  # 10Hz
         
         self.get_logger().info('Gimbal TF broadcaster started')
         
     def gimbal_state_callback(self, msg):
-        """Process gimbal state updates without suspicious value detection"""
+        """Process gimbal state updates"""
         if len(msg.data) >= 3:
             # Get angle values directly from the camera node (already filtered there)
             raw_yaw_deg = msg.data[0]
@@ -48,7 +48,7 @@ class GimbalTfBroadcaster(Node):
             self.roll = math.radians(raw_roll_deg)
             
             # Log raw values for debugging
-            self.get_logger().debug(f"Using angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
+            self.get_logger().info(f"Using angles (deg): yaw={raw_yaw_deg:.1f}, pitch={raw_pitch_deg:.1f}, roll={raw_roll_deg:.1f}")
             
     def publish_transforms(self):
         """Publish all the gimbal-related transforms"""
