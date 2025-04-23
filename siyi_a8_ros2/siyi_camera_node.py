@@ -443,9 +443,20 @@ class SIYICameraNode(Node):
         self.get_logger().info("SIYI A8 Mini camera node cleanup complete")
 
     def filter_with_deadband(self, new_value, old_value, threshold=None):
+        """
+        Only update value if change is greater than threshold
+        Also handles special case for suspicious zero values
+        """
         if threshold is None:
             threshold = self.deadband_threshold
-        """Only update value if change is greater than threshold"""
+        
+        # Special case: if we get a sudden zero when we had a non-zero value
+        # This handles the protocol's occasional problematic zero values
+        if abs(new_value) < 0.01 and abs(old_value) > 1.0:
+            self.get_logger().debug(f"Filtering suspicious zero value: old={old_value:.2f}, new={new_value:.2f}")
+            return old_value
+        
+        # Normal deadband filtering
         if not self.use_deadband or abs(new_value - old_value) >= threshold:
             return new_value
         return old_value
