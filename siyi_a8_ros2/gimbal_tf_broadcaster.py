@@ -60,10 +60,10 @@ class GimbalTfBroadcaster(Node):
         yaw_tf.header.frame_id = 'gimbal_base_link'
         yaw_tf.child_frame_id = 'gimbal_yaw_link'
         
-        # No translation - this comes from URDF static transforms
+        #  translation
         yaw_tf.transform.translation.x = 0.0
         yaw_tf.transform.translation.y = 0.0
-        yaw_tf.transform.translation.z = 0.0
+        yaw_tf.transform.translation.z = -0.022  # From URDF
         
         # Apply yaw rotation around Z
         yaw_quat = self.quaternion_from_euler(0, 0, self.yaw)
@@ -79,10 +79,10 @@ class GimbalTfBroadcaster(Node):
         roll_tf.header.frame_id = 'gimbal_yaw_link'
         roll_tf.child_frame_id = 'gimbal_roll_link'
         
-        # No translation - this comes from URDF static transforms
-        roll_tf.transform.translation.x = 0.0
-        roll_tf.transform.translation.y = 0.0
-        roll_tf.transform.translation.z = 0.0
+        #  translation 
+        roll_tf.transform.translation.x = -0.022  # From URDF
+        roll_tf.transform.translation.y = 0.001   # From URDF
+        roll_tf.transform.translation.z = -0.0322 # From URDF
         
         # Apply roll rotation around X
         roll_quat = self.quaternion_from_euler(self.roll, 0, 0)
@@ -98,10 +98,10 @@ class GimbalTfBroadcaster(Node):
         pitch_tf.header.frame_id = 'gimbal_roll_link'
         pitch_tf.child_frame_id = 'gimbal_pitch_link'
         
-        # No translation - this comes from URDF static transforms
-        pitch_tf.transform.translation.x = 0.0
-        pitch_tf.transform.translation.y = 0.0
-        pitch_tf.transform.translation.z = 0.0
+        # translation
+        pitch_tf.transform.translation.x = 0.03    # From URDF
+        pitch_tf.transform.translation.y = -0.00065 # From URDF
+        pitch_tf.transform.translation.z = 0.0002   # From URDF
         
         # Apply pitch rotation around Y
         pitch_quat = self.quaternion_from_euler(0, self.pitch, 0)
