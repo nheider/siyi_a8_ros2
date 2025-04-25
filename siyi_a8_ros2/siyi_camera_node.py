@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float32MultiArray, String, Bool
 import cv2
@@ -35,6 +35,8 @@ class SIYICameraNode(Node):
         self.declare_parameter('image_height', 720)
         self.declare_parameter('use_deadband', True)  # Enable/disable deadband filter
         self.declare_parameter('deadband_threshold', 0.15)  # Threshold in degrees
+        self.declare_parameter('compress_images', True)  # Enable/disable compressed image publishing
+        self.declare_parameter('compression_quality', 80)  # JPEG compression quality (0-100)
 
         # Get parameters
         self.camera_ip = self.get_parameter('camera_ip').value
@@ -45,6 +47,8 @@ class SIYICameraNode(Node):
         self.image_height = self.get_parameter('image_height').value
         self.use_deadband = self.get_parameter('use_deadband').value
         self.deadband_threshold = self.get_parameter('deadband_threshold').value
+        self.compress_images = self.get_parameter('compress_images').value
+        self.compression_quality = self.get_parameter('compression_quality').value
 
         # Initialize variables
         self.bridge = CvBridge()
@@ -68,6 +72,7 @@ class SIYICameraNode(Node):
 
         # Publishers
         self.image_pub = self.create_publisher(Image, 'siyi_a8/image_raw', camera_qos)
+        self.compressed_image_pub = self.create_publisher(CompressedImage, 'siyi_a8/image_raw/compressed', camera_qos)
         self.camera_info_pub = self.create_publisher(CameraInfo, 'siyi_a8/camera_info', camera_qos)
         self.gimbal_state_pub = self.create_publisher(Float32MultiArray, 'siyi_a8/gimbal_state', 10)
         self.zoom_pub = self.create_publisher(Float32MultiArray, 'siyi_a8/zoom_level', 10)
@@ -192,11 +197,22 @@ class SIYICameraNode(Node):
                     if ret and frame is not None and frame.size > 0:
                         consecutive_failures = 0
                         
-                        # Process and publish frame
+                        # Process and publish raw frame
                         img_msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
                         img_msg.header.stamp = self.get_clock().now().to_msg()
                         img_msg.header.frame_id = "gimbal_camera_optical_frame"
                         self.image_pub.publish(img_msg)
+                        
+                        # Publish compressed image if enabled
+                        if self.compress_images:
+                            compressed_msg = CompressedImage()
+                            compressed_msg.header = img_msg.header
+                            compressed_msg.format = "jpeg"
+                            compressed_msg.data = np.array(cv2.imencode(
+                                '.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, self.compression_quality]
+                            )[1]).tobytes()
+                            self.compressed_image_pub.publish(compressed_msg)
+                        
                         self.publish_camera_info(img_msg.header)
                     else:
                         consecutive_failures += 1
