@@ -36,7 +36,7 @@ class SIYICameraNode(Node):
         self.declare_parameter('use_deadband', True)  # Enable/disable deadband filter
         self.declare_parameter('deadband_threshold', 0.15)  # Threshold in degrees
         self.declare_parameter('compress_images', True)  # Enable/disable compressed image publishing
-        self.declare_parameter('compression_quality', 80)  # JPEG compression quality (0-100)
+        self.declare_parameter('compression_quality', 50)  # JPEG compression quality (0-100)
 
         # Get parameters
         self.camera_ip = self.get_parameter('camera_ip').value
@@ -129,9 +129,15 @@ class SIYICameraNode(Node):
             # More robust pipeline with better error handling and TCP instead of UDP
             gst_str = (
                 f"rtspsrc location={rtsp_url} latency=200 buffer-mode=auto protocols=tcp "
-                f"! queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 ! rtph265depay "
-                f"! h265parse ! avdec_h265 max-threads=2 ! videoconvert ! appsink max-buffers=2 drop=true"
+                f"! queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 "
+                f"! rtph265depay ! h265parse "
+                f"! avdec_h265 max-threads=2 "
+                f"! videoconvert "
+                f"! videoscale method=lanczos "
+                f"! video/x-raw,width=640,height=360 "  # Adaptive resolution
+                f"! appsink max-buffers=2 drop=true"
             )
+            
             
             # Create GStreamer-based capture with explicit pipeline
             self.rtsp_camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
