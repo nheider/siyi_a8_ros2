@@ -3,10 +3,28 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
+import socket
+import time
 
 class GStreamerStreamer(Node):
     def __init__(self):
         super().__init__('gstreamer_streamer')
+        
+        # Parameters for FRP client connection
+        self.declare_parameter('host', '127.0.0.1')
+        self.declare_parameter('port', 1234)
+        self.declare_parameter('width', 640)
+        self.declare_parameter('height', 480)
+        self.declare_parameter('fps', 30)
+        self.declare_parameter('bitrate', 500)
+        
+        host = self.get_parameter('host').value
+        port = self.get_parameter('port').value
+        width = self.get_parameter('width').value
+        height = self.get_parameter('height').value
+        fps = self.get_parameter('fps').value
+        bitrate = self.get_parameter('bitrate').value
+        
         self.subscription = self.create_subscription(
             Image,
             'siyi_a8/image_raw/compressed',
@@ -14,41 +32,99 @@ class GStreamerStreamer(Node):
             10
         )
         self.bridge = CvBridge()
-
-        # GStreamer pipeline to send video over TCP
+        
+        # Wait for FRP client to be available
+        if not self._wait_for_tcp_server(host, port):
+            raise RuntimeError(f"FRP client not available at {host}:{port}")
+        
+        # GStreamer pipeline for FRP client connection
         gst_str = (
-            'appsrc ! videoconvert ! video/x-raw,format=I420,width=640,height=480,framerate=30/1 '
-            '! x264enc tune=zerolatency bitrate=500 speed-preset=ultrafast '
-            '! mpegtsmux ! tcpclientsink host=127.0.0.1 port=1234'
+            f'appsrc ! videoconvert ! video/x-raw,format=I420,width={width},height={height},framerate={fps}/1 '
+            f'! x264enc tune=zerolatency bitrate={bitrate} speed-preset=ultrafast '
+            f'! mpegtsmux ! tcpclientsink host={host} port={port}'
         )
+        
+        self.get_logger().info(f"Connecting to FRP client at {host}:{port}")
+        self.get_logger().info(f"Using GStreamer pipeline: {gst_str}")
+        
         self.out = cv2.VideoWriter(
             gst_str,
             cv2.CAP_GSTREAMER,
             0,  # fourcc (not used)
-            30.0,
-            (640, 480)
+            float(fps),
+            (width, height)
         )
+        
         if not self.out.isOpened():
             self.get_logger().error('Failed to open GStreamer pipeline')
+            self.get_logger().error('Make sure GStreamer is properly installed and FRP client is running')
             raise RuntimeError("Failed to open GStreamer pipeline")
-
+        
+        self.get_logger().info(f'Successfully connected to FRP client at {host}:{port}')
+    
+    def _wait_for_tcp_server(self, host, port, timeout=10):
+        """Wait for FRP client to be available"""
+        self.get_logger().info(f"Waiting for FRP client at {host}:{port}...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex((host, port))
+                sock.close()
+                if result == 0:
+                    self.get_logger().info("FRP client is available")
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        
+        self.get_logger().error(f"FRP client not available at {host}:{port}")
+        self.get_logger().error("Make sure frpc is running before starting this node")
+        return False
+    
     def image_callback(self, msg):
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            frame = cv2.resize(frame, (640, 480))  # Ensure expected size
-            self.out.write(frame)
+            
+            # Get target dimensions
+            width = self.get_parameter('width').value
+            height = self.get_parameter('height').value
+            frame = cv2.resize(frame, (width, height))
+            
+            # Write frame to GStreamer pipeline
+            if self.out.isOpened():
+                self.out.write(frame)
+            else:
+                self.get_logger().error("GStreamer pipeline is not opened")
+                
         except Exception as e:
             self.get_logger().error(f"Error in image callback: {e}")
+    
+    def __del__(self):
+        if hasattr(self, 'out') and self.out.isOpened():
+            self.out.release()
 
 def main(args=None):
     rclpy.init(args=args)
-    node = GStreamerStreamer()
+    
     try:
+        node = GStreamerStreamer()
+        node.get_logger().info("FRP video bridge node started")
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
-    rclpy.shutdown()
+    except Exception as e:
+        print(f"Failed to create node: {e}")
+        print("\nTroubleshooting tips:")
+        print("1. Make sure frpc is running before starting this node")
+        print("2. Check your frpc configuration for the correct local port")
+        print("3. Verify GStreamer plugins are installed: 'gst-inspect-1.0 | grep tcp'")
+        print("4. Use custom port: --ros-args -p port:=YOUR_FRP_PORT")
+    finally:
+        if 'node' in locals():
+            node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
