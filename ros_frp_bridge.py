@@ -33,18 +33,18 @@ class GStreamerStreamer(Node):
         )
         self.bridge = CvBridge()
         
-        # Wait for FRP client to be available
-        if not self._wait_for_tcp_server(host, port):
-            raise RuntimeError(f"FRP client not available at {host}:{port}")
+        # Check if port is already in use (optional safety check)
+        if self._is_port_in_use(host, port):
+            raise RuntimeError(f"Port {port} is already in use at {host}")
         
-        # GStreamer pipeline for FRP client connection
+        # GStreamer pipeline for TCP server
         gst_str = (
             f'appsrc ! videoconvert ! video/x-raw,format=I420,width={width},height={height},framerate={fps}/1 '
             f'! x264enc tune=zerolatency bitrate={bitrate} speed-preset=ultrafast '
-            f'! mpegtsmux ! tcpclientsink host={host} port={port}'
+            f'! mpegtsmux ! tcpserversink host={host} port={port}'
         )
         
-        self.get_logger().info(f"Connecting to FRP client at {host}:{port}")
+        self.get_logger().info(f"Starting TCP server on {host}:{port}")
         self.get_logger().info(f"Using GStreamer pipeline: {gst_str}")
         
         self.out = cv2.VideoWriter(
@@ -57,31 +57,22 @@ class GStreamerStreamer(Node):
         
         if not self.out.isOpened():
             self.get_logger().error('Failed to open GStreamer pipeline')
-            self.get_logger().error('Make sure GStreamer is properly installed and FRP client is running')
+            self.get_logger().error('Make sure GStreamer is properly installed')
             raise RuntimeError("Failed to open GStreamer pipeline")
         
-        self.get_logger().info(f'Successfully connected to FRP client at {host}:{port}')
+        self.get_logger().info(f'Successfully started TCP server on {host}:{port}')
+        self.get_logger().info('Video stream will be available when clients connect')
     
-    def _wait_for_tcp_server(self, host, port, timeout=10):
-        """Wait for FRP client to be available"""
-        self.get_logger().info(f"Waiting for FRP client at {host}:{port}...")
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)
-                result = sock.connect_ex((host, port))
-                sock.close()
-                if result == 0:
-                    self.get_logger().info("FRP client is available")
-                    return True
-            except Exception:
-                pass
-            time.sleep(0.5)
-        
-        self.get_logger().error(f"FRP client not available at {host}:{port}")
-        self.get_logger().error("Make sure frpc is running before starting this node")
-        return False
+    def _is_port_in_use(self, host, port):
+        """Check if port is already in use"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
     
     def image_callback(self, msg):
         try:
@@ -117,10 +108,11 @@ def main(args=None):
     except Exception as e:
         print(f"Failed to create node: {e}")
         print("\nTroubleshooting tips:")
-        print("1. Make sure frpc is running before starting this node")
+        print("1. Make sure frpc is running to expose the TCP server")
         print("2. Check your frpc configuration for the correct local port")
         print("3. Verify GStreamer plugins are installed: 'gst-inspect-1.0 | grep tcp'")
         print("4. Use custom port: --ros-args -p port:=YOUR_FRP_PORT")
+        print("5. Check if port is already in use with: ss -tlnp | grep 1234")
     finally:
         if 'node' in locals():
             node.destroy_node()
