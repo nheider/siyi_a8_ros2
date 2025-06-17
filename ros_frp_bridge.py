@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 import cv2
 import socket
 import time
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 class GStreamerStreamer(Node):
     def __init__(self):
@@ -24,12 +25,18 @@ class GStreamerStreamer(Node):
         height = self.get_parameter('height').value
         fps = self.get_parameter('fps').value
         bitrate = self.get_parameter('bitrate').value
+
+        qos_profile = QoSProfile(
+            reliability = ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
         
         self.subscription = self.create_subscription(
             Image,
-            'siyi_a8/image_raw/compressed',
+            'siyi_a8/image_raw',
             self.image_callback,
-            10
+            qos_profile
         )
         self.bridge = CvBridge()
         
@@ -41,7 +48,7 @@ class GStreamerStreamer(Node):
         gst_str = (
             f'appsrc ! videoconvert ! video/x-raw,format=I420,width={width},height={height},framerate={fps}/1 '
             f'! x264enc tune=zerolatency bitrate={bitrate} speed-preset=ultrafast '
-            f'! mpegtsmux ! tcpserversink host={host} port={port}'
+            f'! h264parse ! mpegtsmux ! tcpserversink host={host} port={port}'
         )
         
         self.get_logger().info(f"Starting TCP server on {host}:{port}")
